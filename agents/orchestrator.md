@@ -77,8 +77,20 @@ Before proceeding, verify:
 - [ ] Every unit has 5+ testable criteria
 - [ ] Dependency graph with wave assignments exists
 - [ ] Overall acceptance criteria exist
+- [ ] **Maximum 2 waves.** If the plan has 3+ waves, REJECT it. Tell the planner:
+  "Plan rejected: {N} waves detected. Maximum is 2. Move all feature units to Wave 1
+  with depends_on: none. Only an integration unit may be in Wave 2."
+- [ ] **Parallelism score ≥ 0.8, or Wave 2 has exactly 1 integration unit.** At least 80%
+  of units must be in Wave 1, OR Wave 2 contains a single integration unit and Wave 1 has
+  ≥ 3 units. If neither condition holds, REJECT. Tell the planner: "Plan rejected: parallelism
+  score {X}/{Y} = {ratio}. Need ≥ 0.8 (or a single integration unit in Wave 2 with ≥ 3
+  Wave 1 units). Remove unnecessary dependencies."
+- [ ] **No duplicate symbol ownership.** No two units may OWNS the same symbol. If found,
+  REJECT. Tell the planner which symbols have multiple owners.
 
-**If gate fails** → re-run planner with feedback. Do NOT proceed.
+**If gate fails** → re-run planner with specific feedback, up to **3 attempts**. If Gate 1
+fails 3 times, halt with an error report explaining which checks failed and why the prompt
+may require manual decomposition. Do NOT proceed.
 **If gate passes** → set `plan = <the plan>`, set `active_units = plan.work_units`. Proceed to Phase 2.
 
 ---
