@@ -34,13 +34,29 @@ You have two parallelism superpowers — use BOTH aggressively:
 **Ask yourself before every action: "Can I run this in parallel with something else?"**
 If yes — do it. If you're serializing independent work, you are violating this directive.
 
-## The Loop
+## The Loop — STRICT GATE ENFORCEMENT
 
-You execute this loop until the application is complete or you hit the 3-round limit:
+You execute this loop until the application is complete or you hit the 3-round limit.
 
-### Round 1 (and only round for planning):
+**CRITICAL: Each phase has a gate. You CANNOT proceed to the next phase until the gate
+check passes. You CANNOT skip phases. Skipping Phase 4 (Eval) is the most common failure
+mode — guard against it explicitly.**
 
-**PHASE 1 — PLAN**
+### State you must track:
+
+```
+round: 1                    # Current round (1, 2, or 3)
+plan: null                  # Set after Phase 1
+active_units: []            # All units in round 1; only failed units in rounds 2+
+changeset_ids: []           # Set after Phase 2 — one per unit in active_units
+merged_commit: null         # Set after Phase 3 — latest commit hash
+merge_failures: []          # Changesets that failed to merge
+eval_reports: []            # Set after Phase 4 — MUST EXIST before dk_push
+```
+
+---
+
+### PHASE 1 — PLAN
 
 Spawn a single planner agent:
 
@@ -52,26 +68,26 @@ Agent(
 )
 ```
 
-Wait for the planner to return. You receive:
-- A **specification** — full description of what to build
-- **Work units** — parallelizable implementation tasks, decomposed by symbol
-- **Acceptance criteria** — testable criteria per unit and overall
+Wait for the planner to return.
 
-Validate the plan:
-- Every work unit must have acceptance criteria
-- Dependencies between units must be explicit
-- No unit should be so large it takes > 30 minutes to implement
+**═══ GATE 1 CHECK ═══**
+Before proceeding, verify:
+- [ ] Plan has a specification (stack, features, data model)
+- [ ] Plan has work units with symbols + acceptance criteria
+- [ ] Every unit has 5+ testable criteria
+- [ ] Dependency graph with wave assignments exists
+- [ ] Overall acceptance criteria exist
 
-If the plan is insufficient, re-run the planner with feedback. Do not proceed with a weak plan.
+**If gate fails** → re-run planner with feedback. Do NOT proceed.
+**If gate passes** → set `plan = <the plan>`, set `active_units = plan.work_units`. Proceed to Phase 2.
 
-**PHASE 2 — BUILD**
+---
 
-Read the work units. Group them by dependency wave:
-- Wave 1: all units with `depends_on: none`
-- Wave 2: units whose dependencies are all in Wave 1
-- Wave N: units whose dependencies are all in earlier waves
+### PHASE 2 — BUILD
 
-For each wave, dispatch ALL generators in that wave simultaneously:
+**Entry check**: `plan` must be set. If null → STOP, go back to Phase 1.
+
+Group work units by dependency wave. For each wave, dispatch ALL generators simultaneously:
 
 ```
 // Single message with multiple Agent tool calls:
@@ -84,82 +100,169 @@ Agent(
 // ... one per unit in this wave
 ```
 
-Wait for all generators in the wave to complete before starting the next wave.
+Wait for all generators in the wave. Then next wave.
 
-**PHASE 3 — LAND**
+**═══ GATE 2 CHECK ═══**
+Before proceeding, verify:
+- [ ] Every generator in `active_units` has reported back
+- [ ] Every report includes a changeset_id
+- [ ] `changeset_ids` has one entry per unit in `active_units`
 
-After all generators have submitted their changesets, land them.
+In round 1, `active_units` = all plan units. In rounds 2+, `active_units` = only the
+units that failed in the previous eval. Gate 2 checks against `active_units`, not all
+plan units.
 
-**Step 1 — Verify in PARALLEL:**
-Dispatch `dk_verify` for ALL submitted changesets at the same time. Each verification is
-independent — run them all in parallel. Do NOT wait for changeset A's verify before
-starting changeset B's verify.
+**If gate fails** → re-dispatch crashed generators. Do NOT proceed until all have submitted.
+**If gate passes** → set `changeset_ids = [...]`. Proceed to Phase 3.
+
+---
+
+### PHASE 3 — LAND
+
+**Entry check**: `changeset_ids` must be non-empty. If empty → STOP, go back to Phase 2.
+
+1. **Verify in PARALLEL** — `dk_verify` ALL changesets simultaneously
+2. **Approve** — `dk_approve` each verified changeset
+3. **Merge sequentially** — `dk_merge` each in dependency order
+
+Handle conflicts: `dk_resolve` → retry merge.
+
+**═══ GATE 3 CHECK ═══**
+Before proceeding, verify:
+- [ ] Every changeset is either merged OR recorded in `merge_failures` with reason
+- [ ] At least one changeset merged successfully (a `merged_commit` hash exists)
+- [ ] Verification/merge failures are recorded for the eval phase
+
+Partial merge failures are tolerable — the evaluator will catch missing functionality.
+But if ZERO changesets merged (no code landed at all), that's a hard block.
+
+**If zero merges** → all generators failed. Re-run planner or re-dispatch generators.
+**If some merged** → set `merged_commit = <hash>`, record `merge_failures`. Proceed to Phase 4.
+
+---
+
+### PHASE 4 — EVAL ⚠️ MANDATORY — NEVER SKIP
+
+**Entry check**: `merged_commit` must be set. If null → STOP, go back to Phase 3.
+
+**⚠️ STOP AND READ THIS: You are about to evaluate. This is NOT optional.**
+**⚠️ dk_verify (Phase 3) is NOT evaluation. It runs lint/type-check/test.**
+**⚠️ Evaluation means: start the app, test with chrome-devtools, score criteria.**
+**⚠️ You CANNOT call dk_push until eval_reports is populated.**
+
+**Before dispatching evaluators**, start the dev server ONCE as the orchestrator:
+1. Install dependencies and run the dev command
+2. Wait for the server to be ready (check the port)
+3. Record the server URL (e.g., `http://localhost:5173`)
+
+Then dispatch evaluators **sequentially** (one at a time), passing the already-running
+server URL. Evaluators MUST run sequentially because they share a single chrome-devtools
+browser session — parallel evaluators would race on `navigate_page`, `take_screenshot`,
+and `click` calls, corrupting each other's evidence.
+
+Do NOT instruct evaluators to start their own dev server.
 
 ```
-// Single message — all verify calls in parallel:
-dk_verify(changeset_id: "changeset-1")
-dk_verify(changeset_id: "changeset-2")
-dk_verify(changeset_id: "changeset-3")
-```
+// Dispatch evaluators ONE AT A TIME — wait for each to complete before the next:
+for each work_unit in active_units:
+  Agent(
+    prompt: <evaluator.md + spec + this unit's criteria + "The dev server is already
+             running at <SERVER_URL>. Do NOT start another dev server. Connect to
+             the running server and test via chrome-devtools. Score every criterion.
+             You have exclusive access to the browser — no other evaluator is running.">,
+    description: "Eval: <unit title>",
+    name: "evaluator-<unit-id>"
+  )
+  // WAIT for this evaluator to complete before dispatching the next
 
-**Step 2 — Approve all that passed:**
-`dk_approve` each verified changeset.
-
-**Step 3 — Merge sequentially** (only this step MUST be serial):
-`dk_merge` each approved changeset in dependency order. Each merge advances HEAD.
-
-If merge returns conflict:
-- Non-overlapping: `dk_resolve(resolution: "proceed")`, reconnect and retry
-- True conflict: `dk_resolve(resolution: "keep_yours")` — trust the latest generator
-
-If verify failed: collect failures for the eval phase.
-
-**PHASE 4 — EVAL (parallel)**
-
-Dispatch MULTIPLE evaluator agents simultaneously — one per work unit plus one for overall
-integration criteria. All in a single message:
-
-```
-// Single message — all evaluators in parallel:
+// After all unit evaluators, run the integration evaluator:
 Agent(
-  prompt: <evaluator.md + spec + Unit 1 criteria>,
-  description: "Eval: Unit 1 auth",
-  name: "evaluator-unit-1"
-)
-Agent(
-  prompt: <evaluator.md + spec + Unit 2 criteria>,
-  description: "Eval: Unit 2 tasks",
-  name: "evaluator-unit-2"
-)
-Agent(
-  prompt: <evaluator.md + spec + overall criteria>,
+  prompt: <evaluator.md + spec + overall criteria + "The dev server is already
+           running at <SERVER_URL>. Do NOT start another dev server. Test
+           integration across all units. Verify the full application end-to-end.
+           You have exclusive access to the browser.">,
   description: "Eval: integration",
   name: "evaluator-integration"
 )
 ```
 
-Wait for all evaluators to complete. Merge their reports into a unified eval result.
+Wait for the integration evaluator to complete. Then stop the dev server.
 
-**PHASE 5 — SHIP or FIX**
+**Note on parallelism trade-off**: Sequential evaluation sacrifices speed for correctness.
+Each evaluator needs exclusive access to the chrome-devtools browser session to produce
+reliable evidence. This is the ONE phase where serialization is mandatory — all other
+phases (Build, Land) maximize parallelism as described in the Prime Directive.
 
-Count the results across all evaluator reports:
-- **All PASS** → call `dk_push(mode: "pr")`. Create the PR with a summary of what was built.
-  Done. Report the PR URL to the user.
+**═══ GATE 4 CHECK ═══**
+Before proceeding, verify:
+- [ ] I have an eval report for EVERY work unit (not just some)
+- [ ] I have an overall/integration eval report
+- [ ] Every acceptance criterion has a numeric score
+- [ ] Every score has evidence (screenshots, console output, HTTP responses)
+- [ ] No criterion is unscored
+- [ ] `eval_reports` is populated
 
-- **Some FAIL, round < 3** → extract failures. Map each failure back to its work unit.
-  Re-dispatch ALL failed generators simultaneously in a single message, each with their
-  evaluator's specific feedback. Go back to PHASE 3.
+**If gate fails** → re-dispatch missing evaluators. Do NOT call dk_push.
+**If gate passes** → set `eval_reports = [...]`. Proceed to Phase 5.
 
-- **Still failing after round 3** → call `dk_push(mode: "pr")` anyway. In the PR description,
-  list what works and what doesn't. Report to the user honestly.
+---
+
+### PHASE 5 — SHIP or FIX
+
+**Entry check**: `eval_reports` must be non-empty AND have scores for every criterion.
+If eval_reports is empty → **STOP. YOU SKIPPED PHASE 4. GO BACK.**
+
+Count results:
+- **All criteria PASS** → `dk_push(mode: "pr")`. Include eval summary in PR description.
+  Done. Report the PR URL.
+
+- **Some FAIL, round < 3** → Execute the Round Transition
+  state reset (below), then re-enter Phase 2 with `active_units` set to only the
+  failed units. Each generator gets their evaluator's specific feedback.
+  Then proceed through Phase 3 → Phase 4 → Phase 5.
+
+- **Round 3 exhausted** → `dk_push(mode: "pr")` with issues documented. Report honestly.
+
+**The PR description MUST include:**
+```markdown
+## Evaluation Results
+- Pass rate: X/Y criteria (Z%)
+- Rounds: {round}
+- [Per-unit scores and evidence summary]
+```
+If the PR description doesn't include eval results → you skipped Phase 4.
+
+---
+
+### Round Transition (before re-entering Phase 2):
+
+When Phase 5 decides to fix, explicitly reset state before the next round:
+
+```
+# ROUND TRANSITION — execute this before re-entering Phase 2:
+round += 1
+active_units = [only the units whose criteria failed in eval]
+changeset_ids = []          # wiped — new generators will repopulate
+merged_commit = null        # wiped — new merges will set this
+merge_failures = []         # wiped
+eval_reports = []           # wiped — new evaluators will repopulate
+# plan remains unchanged
+```
+
+**Do NOT carry stale state.** If `changeset_ids` from round 1 persists into round 2,
+Gate 2 may incorrectly pass. If `eval_reports` from round 1 persists, Gate 4 may
+incorrectly pass. Wipe them.
 
 ### Subsequent Rounds (2 and 3):
 
-Skip PHASE 1 (plan already exists). Start at PHASE 2 with only the failed work units.
-Dispatch ALL failed generators in parallel in a single message. Each receives:
+After state reset, skip Phase 1 (plan exists). Enter Phase 2 with `active_units`
+(only the failed units). Dispatch ALL failed generators in parallel. Each receives:
 - The original work unit
-- The evaluator's specific failure feedback
+- The evaluator's specific failure feedback + evidence
 - Instructions to fix only the failing criteria
+
+Then proceed through Phase 3 (Land) → Phase 4 (Eval) → Phase 5 (Ship or Fix).
+**Phase 4 is mandatory on EVERY round. Not just round 1.**
 
 ## Decision-Making Rules
 
@@ -178,7 +281,8 @@ You never ask the user. You decide:
 
 ## PR Description Format
 
-When shipping, create a PR with this structure:
+When shipping, create a PR with this structure. **The Evaluation Results section is
+mandatory — its absence means you skipped Phase 4.**
 
 ```markdown
 ## What was built
@@ -190,11 +294,22 @@ When shipping, create a PR with this structure:
 ## Work completed
 <List of work units and their status>
 
-## Test results
-<Summary of eval results — what passed, what was tested>
+## Evaluation Results
+- **Pass rate:** X/Y criteria (Z%)
+- **Rounds:** {rounds}
+- **Evaluators dispatched:** {count}
+
+### Per-unit scores
+| Unit | Criteria Passed | Score | Key Evidence |
+|------|----------------|-------|-------------|
+| <unit 1> | 5/5 | PASS | <screenshot/test summary> |
+| <unit 2> | 3/5 | FAIL | <specific failures> |
+
+### Remaining issues (if any)
+<List of failed criteria with fix hints from evaluator>
 
 ## Built autonomously by dkod-harness
-Planner → {N} parallel generators → Evaluator
+Planner → {N} parallel generators → {M} sequential evaluators
 Total rounds: {rounds}
 ```
 
@@ -203,15 +318,29 @@ Total rounds: {rounds}
 - **Generator crashes**: Re-dispatch that single generator. Do not restart the entire build.
 - **dk_merge fails repeatedly**: Skip that changeset, note it in the eval.
 - **Dev server won't start**: Check package.json, run install, check for port conflicts.
-  If still broken after 3 attempts, skip live testing and rely on dk_verify + code review.
+  If still broken after 3 attempts, produce a degraded eval report that explicitly records
+  "live testing skipped — dev server failed to start" for each criterion. The eval report
+  MUST still exist in `eval_reports` with scores (mark untestable criteria as INCONCLUSIVE
+  with reason). You CANNOT skip Phase 4 entirely — a degraded report is mandatory.
 - **All generators fail**: Something is fundamentally wrong with the plan. Re-run the planner
   with "the previous plan produced implementations that all failed to build" and the error logs.
 
-## What You Track
+## What You Track — Gate State
 
-Throughout the loop, maintain awareness of:
-- Current round number (1, 2, or 3)
-- Which work units passed vs failed
-- Cumulative eval feedback per unit
-- Total changesets merged
-- Any unresolved conflicts
+Throughout the loop, maintain this state explicitly. If any field is null/empty when a
+gate check requires it, you have skipped a phase.
+
+```
+round: 1                          # Current round (1, 2, or 3)
+plan: <plan artifact>             # Set after Gate 1 passes
+active_units: [...]               # All units in round 1; only failed units in rounds 2+
+changeset_ids: []                 # Set after Gate 2 — one per unit in active_units
+merged_commit: null               # Set after Gate 3 — latest commit hash after all merges
+merge_failures: []                # Changesets that failed to merge (recorded, not blocking)
+eval_reports: []                  # Set after Gate 4 — MUST EXIST before dk_push
+overall_pass_rate: "X/Y"          # Computed from eval_reports
+```
+
+**Self-check before dk_push**: "Is eval_reports populated with scores for every criterion?
+If NO → I have not completed Phase 4. Go back."
+
