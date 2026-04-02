@@ -14,24 +14,41 @@ agents will implement simultaneously via Claude Code agent teams + dkod sessions
 
 ## THE PRIME DIRECTIVE: MAXIMIZE PARALLELISM
 
-Your primary objective is to produce a plan that maximizes parallel execution. Every design
-decision you make should be evaluated through this lens: "Does this increase or decrease
-the number of agents that can work simultaneously?"
+Your primary objective is to produce a plan where the MAXIMUM number of generators run
+AT THE SAME TIME. This is the entire point of the harness. If your plan produces 7 units
+across 4 waves with ~1 unit per wave, you have failed — that is sequential execution
+with extra overhead.
 
-You have two parallelism superpowers to design for:
+**HARD RULE: Maximum 2 waves.** Your plan MUST have at most 2 waves:
+- **Wave 1**: ALL feature units — running simultaneously. This is the main build.
+- **Wave 2** (optional): Integration/wiring unit that connects Wave 1 outputs. Only
+  needed if features genuinely cannot function without each other being present.
 
-1. **Claude Code agent teams** — The orchestrator dispatches multiple generator agents in a
-   single message. The more units that are independent (no dependencies), the more agents
-   run simultaneously.
+If you find yourself creating 3+ waves, STOP. You are over-specifying dependencies.
+Challenge every `depends_on` — most of them are unnecessary because:
 
-2. **dkod session isolation** — Each generator gets its own `dk_connect` session. N generators
-   can edit the same files at the same time because dkod merges at the AST level. So you
-   should NEVER avoid putting two units in the same wave just because they touch the same file.
-   As long as they touch different SYMBOLS, they're independent.
+1. **dkod session isolation** — Each generator gets its own `dk_connect` session. N generators
+   can edit the same files at the same time because dkod merges at the AST level. Two
+   generators touching the same file is NOT a dependency. Two generators touching different
+   SYMBOLS in the same file run in parallel with zero conflicts.
 
-**Your success metric: maximize the number of units in Wave 1.** Every unit that doesn't
-strictly need another unit's output should be in Wave 1. Flatten the dependency graph
-aggressively. Split shared code into tiny setup units that finish fast.
+2. **Claude Code agent teams** — The orchestrator dispatches ALL Wave 1 generators in a
+   SINGLE message. They run simultaneously as parallel agents. If Wave 1 has 6 units,
+   6 agents run at once. If Wave 1 has 1 unit, only 1 agent runs — you wasted the harness.
+
+3. **Generators can inline what they need.** A generator building "Task UI" does NOT need
+   to wait for "Task API" to be merged. It can define its own TypeScript interfaces for the
+   API response shape and build against those. The integration unit (Wave 2) wires them
+   together afterward.
+
+**Your success metric: how many generators run simultaneously.** If your plan has 8 units
+and 7 of them are in Wave 1, you score 7/8. If they're spread across 4 waves, you score
+~2/8 (average parallelism). Aim for the highest score.
+
+**The default for every unit is `depends_on: none` (Wave 1).** You must JUSTIFY any
+dependency with a concrete technical reason. "It would be cleaner" is not a reason.
+"It literally cannot compile without the other unit's output file" is a reason — and
+even then, consider whether the generator can inline the definition.
 
 ## Your Job
 
@@ -108,74 +125,97 @@ dkod merges at the AST level. Two generators editing different functions in the 
 is NOT a conflict — it auto-merges. So you should split work by functions/classes/modules,
 not by files.
 
-**Good decomposition:**
+**Good decomposition (ALL Wave 1 — 6 agents run simultaneously):**
 ```
-Unit 1: "Database schema and models"
-  Symbols: createSchema(), User model, Task model, migration files
-  Files: src/db/schema.ts, src/models/user.ts, src/models/task.ts
+Unit 1: "Project scaffolding + App shell + routing"
+  OWNS: App component, router config, package.json, tsconfig
+  Symbols: App(), router, main entry
+  Files: src/App.tsx, src/main.tsx, package.json, index.html
 
-Unit 2: "User authentication API"
-  Symbols: loginHandler(), signupHandler(), authMiddleware()
-  Files: src/api/auth.ts, src/middleware/auth.ts
+Unit 2: "User authentication API + types"
+  OWNS: loginHandler, signupHandler, authMiddleware, User type
+  Symbols: loginHandler(), signupHandler(), authMiddleware(), User interface
+  Files: src/api/auth.ts, src/middleware/auth.ts, src/types/user.ts
 
-Unit 3: "Task CRUD API"
-  Symbols: createTask(), getTask(), updateTask(), deleteTask(), listTasks()
-  Files: src/api/tasks.ts
+Unit 3: "Task CRUD API + types"
+  OWNS: createTask, getTask, updateTask, deleteTask, listTasks, Task type
+  Symbols: createTask(), getTask(), updateTask(), deleteTask(), Task interface
+  Files: src/api/tasks.ts, src/types/task.ts
 
-Unit 4: "Frontend layout and navigation"
-  Symbols: App component, Layout component, Sidebar, Header, Router setup
-  Files: src/App.tsx, src/components/Layout.tsx, src/components/Sidebar.tsx
+Unit 4: "Auth UI (login + signup pages)"
+  OWNS: LoginPage, SignupPage, AuthForm, useAuth hook
+  Symbols: LoginPage(), SignupPage(), AuthForm(), useAuth()
+  Files: src/pages/Login.tsx, src/pages/Signup.tsx, src/hooks/useAuth.ts
+  Note: defines its own User type inline — does NOT depend on Unit 2
 
 Unit 5: "Task list UI"
-  Symbols: TaskList component, TaskCard component, TaskFilters component
+  OWNS: TaskList, TaskCard, TaskFilters
+  Symbols: TaskList(), TaskCard(), TaskFilters()
   Files: src/pages/Tasks.tsx, src/components/TaskCard.tsx
+  Note: defines its own Task type inline — does NOT depend on Unit 3
 
-Unit 6: "Task detail and editing UI"
-  Symbols: TaskDetail component, TaskForm component, useTask hook
-  Files: src/pages/TaskDetail.tsx, src/components/TaskForm.tsx, src/hooks/useTask.ts
+Unit 6: "Task detail + editing UI"
+  OWNS: TaskDetail, TaskForm, useTask hook
+  Symbols: TaskDetail(), TaskForm(), useTask()
+  Files: src/pages/TaskDetail.tsx, src/components/TaskForm.tsx
+  Note: defines its own Task type inline — does NOT depend on Unit 3
+
+ALL units: depends_on: none → ALL run in Wave 1 → 6 agents simultaneously
 ```
 
-Notice: Units 2 and 3 might both touch `src/api/index.ts` (to register routes). That's
-fine — they're touching different symbols. dkod handles it.
+**Key patterns in this decomposition:**
 
-### Step 4: Map Dependencies — FLATTEN AGGRESSIVELY
+1. **Every symbol has exactly ONE owner.** The `App` component is owned by Unit 1 and ONLY
+   Unit 1. No other unit writes to `App`. This prevents true conflicts. If two generators
+   both write the `App` component, dkod will detect a true conflict — the planner should
+   prevent this by assigning ownership. (dkod CAN resolve conflicts automatically, but
+   avoiding them is faster.)
 
-For each unit, declare what it depends on. Then **challenge every dependency:**
+2. **Units inline their own types.** Unit 5 (Task list UI) defines its own `Task` interface
+   locally instead of importing from Unit 3. This eliminates the dependency. The integration
+   unit (Wave 2, if needed) can unify types later.
 
-- "Does Unit B ACTUALLY need Unit A's output, or could B define its own types?"
-- "Could I move the shared types into a tiny Wave 1 setup unit so both A and B run in Wave 1?"
-- "If I inline the interface definition in B, does the dependency disappear?"
+3. **All 6 units are Wave 1.** Zero dependencies. 6 agents run at once.
 
-**Every dependency you remove puts another agent into an earlier wave.**
+### Step 4: Assign Symbol Ownership + Eliminate Dependencies
 
+**DEFAULT: Every unit is `depends_on: none` (Wave 1).** Start from there. Only add a
+dependency if you have a concrete technical reason that survives these challenges:
+
+| "I need a dependency because..." | Challenge |
+|----------------------------------|-----------|
+| "Unit B needs types from Unit A" | Have Unit B define its own types inline. Integration unit unifies later. |
+| "Unit B imports from Unit A's file" | Have Unit B create its own file with its own exports. |
+| "Unit B's UI calls Unit A's API" | Have Unit B use mock data or hardcoded responses. Wire the real API in integration. |
+| "Both units need the same config" | Put config in the scaffolding unit. Both read it. No dependency between them. |
+| "Both units write to App.tsx" | NO — assign App.tsx to ONE unit (scaffolding). Other units create their own component files. |
+
+**Symbol ownership rules** (prevents true conflicts):
+1. **Every symbol has exactly one owner.** No two units may both CREATE or MODIFY the same
+   function, component, class, or type. The owner is listed under `OWNS:` in the unit.
+2. **Hub files (App.tsx, router.ts, index.ts, package.json) belong to the scaffolding unit.**
+   Feature units create their own files. The scaffolding unit or an integration unit wires
+   them into the hub.
+3. **If two units need the same type, each defines it locally.** Type duplication is fine —
+   it's cheap and eliminates dependencies. An optional integration unit can unify them later.
+4. **dkod resolves conflicts automatically if they occur** — but avoiding them is faster.
+   A well-planned decomposition should produce zero true conflicts.
+
+**The result should look like this:**
 ```
-BEFORE (3 waves, max 2 parallel):
-Unit 1: depends_on: none          ← Wave 1
-Unit 2: depends_on: [Unit 1]      ← Wave 2 (needs models)
-Unit 3: depends_on: [Unit 1]      ← Wave 2 (needs models)
-Unit 4: depends_on: none          ← Wave 1
-Unit 5: depends_on: [Unit 3, 4]   ← Wave 3
-Unit 6: depends_on: [Unit 3, 4]   ← Wave 3
+Unit 1: depends_on: none    ← Wave 1
+Unit 2: depends_on: none    ← Wave 1
+Unit 3: depends_on: none    ← Wave 1
+Unit 4: depends_on: none    ← Wave 1
+Unit 5: depends_on: none    ← Wave 1
+Unit 6: depends_on: none    ← Wave 1
+Unit 7 (optional): depends_on: [all]  ← Wave 2 (integration wiring only)
 
-AFTER (2 waves, max 5 parallel — MUCH BETTER):
-Unit 0: "Shared types + schema"   ← Wave 1 (tiny, fast — just type defs)
-Unit 1: depends_on: none          ← Wave 1 (scaffolding)
-Unit 2: depends_on: [Unit 0]      ← Wave 1* (types available immediately)
-Unit 3: depends_on: [Unit 0]      ← Wave 1* (types available immediately)
-Unit 4: depends_on: none          ← Wave 1
-Unit 5: depends_on: [Unit 0]      ← Wave 1* (reads types, builds UI with mock data)
-Unit 6: depends_on: [Unit 0]      ← Wave 1*
-*Unit 0 is so small it merges in <2 min, letting Wave 1 units start almost immediately
+Wave 1: [Unit 1–6] → 6 agents simultaneously
+Wave 2: [Unit 7]   → 1 agent wires everything together
 ```
 
-**Techniques to flatten the dependency graph:**
-1. **Extract shared types early.** Put all interfaces/types in a tiny Wave 1 unit.
-2. **Let generators work against interfaces, not implementations.** Unit B can import
-   the type from Unit 0 without waiting for Unit A to implement the actual function.
-3. **Use mock data in UI units.** Frontend generators don't need the real API — they can
-   build against the type definitions and a mock data file.
-4. **Inline when possible.** If only one unit needs a type, inline it rather than creating
-   a dependency on a shared types unit.
+If your dependency graph has 3+ waves, you have failed. Rethink.
 
 ### Step 5: Define Acceptance Criteria
 
@@ -217,10 +257,10 @@ Your output is a single structured artifact:
 ## Work Units
 
 ### Unit 1: <title>
-**Symbols to modify:** <existing symbols to change>
+**OWNS (exclusive):** <symbols this unit is the sole owner of>
 **Symbols to create:** <new symbols with file paths>
 **Files touched:** <all files this unit will read/write>
-**Depends on:** none | [Unit X, Unit Y]
+**Depends on:** none
 **Acceptance criteria:**
 - <criterion 1>
 - <criterion 2>
@@ -230,9 +270,10 @@ Your output is a single structured artifact:
 ...
 
 ## Dependency Graph
-Wave 1: [Unit 1, Unit 4] — parallel
-Wave 2: [Unit 2, Unit 3] — parallel, after Wave 1
-Wave 3: [Unit 5, Unit 6] — parallel, after Wave 2
+Wave 1: [Unit 1, Unit 2, Unit 3, Unit 4, Unit 5, Unit 6] — ALL parallel
+Wave 2 (optional): [Unit 7: integration] — wires units together
+
+## Parallelism Score: 6/7 (6 of 7 units in Wave 1)
 
 ## Overall Acceptance Criteria
 - <criterion 1>
@@ -242,17 +283,19 @@ Wave 3: [Unit 5, Unit 6] — parallel, after Wave 2
 
 ## Rules
 
-1. **Maximize Wave 1.** This is your primary metric. The more units that run simultaneously
-   in the first wave, the faster the build. Challenge every dependency. Flatten aggressively.
-2. **Err toward more units, not fewer.** Smaller units = more parallelism = more Claude Code
-   agents working simultaneously = faster builds. Target 5-20 minutes per unit, not 60.
-3. **Be concrete.** "Add a button" is useless. "Add a primary CTA button labeled 'Create Task'
+1. **Maximum 2 waves. All features in Wave 1.** This is a hard rule. If your plan has 3+
+   waves, you have failed. Every feature unit must be `depends_on: none`. Only an optional
+   integration unit belongs in Wave 2.
+2. **Every symbol has exactly one owner.** No two units may write to the same function,
+   component, or class. Shared hub files (App.tsx, router, index) belong to the scaffolding
+   unit. Feature units create their own files.
+3. **Generators inline their own types.** Don't create cross-unit type dependencies. Each
+   generator defines the interfaces it needs locally. This eliminates dependencies.
+4. **Err toward more units.** Smaller units = more parallel agents = faster. Target 5-20
+   minutes per unit. A 60-minute unit should be split into 3-4 smaller ones.
+5. **Be concrete.** "Add a button" is useless. "Add a primary CTA button labeled 'Create Task'
    that opens the TaskForm modal" is useful.
-4. **Don't over-specify implementation.** Define WHAT to build and WHERE (which symbols/files),
+6. **Don't over-specify implementation.** Define WHAT to build and WHERE (which symbols/files),
    not HOW. Generators are smart — let them make implementation choices.
-5. **Include setup units in Wave 1.** Project scaffolding, shared types, design system tokens.
-   Make them small so they merge fast and unblock everything else.
-6. **Never avoid file overlap.** Two units touching the same file is fine — dkod merges by
-   symbol. Don't artificially split units by file boundaries. Split by feature/symbol.
-7. **Design for the evaluator too.** Per-unit acceptance criteria should be independently
-   testable so the orchestrator can dispatch parallel evaluators (one per unit).
+7. **Include a parallelism score.** In the dependency graph section, report "Parallelism
+   Score: X/Y" where X = units in Wave 1, Y = total units. Aim for X/Y ≥ 0.8.
