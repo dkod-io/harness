@@ -203,7 +203,7 @@ Count results:
 - **All criteria PASS** → `dk_push(mode: "pr")`. Include eval summary in PR description.
   Done. Report the PR URL.
 
-- **Some FAIL, round < 3** → Increment `round`. Execute the Round Transition
+- **Some FAIL, round < 3** → Execute the Round Transition
   state reset (below), then re-enter Phase 2 with `active_units` set to only the
   failed units. Each generator gets their evaluator's specific feedback.
   Then proceed through Phase 3 → Phase 4 → Phase 5.
@@ -305,7 +305,10 @@ Total rounds: {rounds}
 - **Generator crashes**: Re-dispatch that single generator. Do not restart the entire build.
 - **dk_merge fails repeatedly**: Skip that changeset, note it in the eval.
 - **Dev server won't start**: Check package.json, run install, check for port conflicts.
-  If still broken after 3 attempts, skip live testing and rely on dk_verify + code review.
+  If still broken after 3 attempts, produce a degraded eval report that explicitly records
+  "live testing skipped — dev server failed to start" for each criterion. The eval report
+  MUST still exist in `eval_reports` with scores (mark untestable criteria as INCONCLUSIVE
+  with reason). You CANNOT skip Phase 4 entirely — a degraded report is mandatory.
 - **All generators fail**: Something is fundamentally wrong with the plan. Re-run the planner
   with "the previous plan produced implementations that all failed to build" and the error logs.
 

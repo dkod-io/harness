@@ -113,10 +113,11 @@ USER PROMPT
 │  *** YOU CANNOT SKIP THIS PHASE ***                  │
 │  *** dk_push IS BLOCKED UNTIL EVAL COMPLETES ***     │
 │                                                     │
+│  Orchestrator starts dev server ONCE, then:         │
 │  N evaluator agents dispatched simultaneously:      │
 │  • One evaluator per work unit (parallel)           │
-│  • Each: start dev server, chrome-devtools test,    │
-│    grade criteria with evidence (screenshots)       │
+│  • Each: connect to shared dev server, test via     │
+│    chrome-devtools, grade criteria with evidence     │
 │  • One final evaluator for overall/integration      │
 │                                                     │
 │  GATE 4 — Required output:                          │
