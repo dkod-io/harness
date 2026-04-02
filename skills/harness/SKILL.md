@@ -137,7 +137,7 @@ USER PROMPT
 │                  │  │  Re-dispatch generators with  │
 │  GATE 5:         │  │  specific eval feedback.      │
 │  ✓ Eval report   │  │  Max 3 rounds total.          │
-│    shows ALL     │  │  Then back to LAND → EVAL.    │
+│    shows ALL     │  │  Then back to BUILD → LAND →  │
 │    PASS, OR      │  └──────────────────────────────┘
 │  ✓ Round 3       │
 │    exhausted     │
@@ -230,15 +230,18 @@ from unmerged units. But if zero changesets merged, that's a hard block — re-d
 ⚠️ **THIS PHASE IS NOT OPTIONAL. dk_verify IS NOT A SUBSTITUTE FOR EVALUATION.**
 ⚠️ **YOU MUST DISPATCH EVALUATOR AGENTS BEFORE YOU CAN CALL dk_push.**
 
-1. **Dispatch parallel evaluators**: One evaluator per work unit + one for overall
-   integration criteria. All in a single message.
-2. Each evaluator MUST:
-   - Start the dev server (install deps, run dev command)
+1. **Start the dev server ONCE** as the orchestrator (install deps, run dev command,
+   wait for the port to be ready). Record the server URL.
+2. **Dispatch parallel evaluators**: One evaluator per work unit + one for overall
+   integration criteria. All in a single message. Pass the already-running server URL
+   to each evaluator — do NOT instruct them to start their own dev server.
+3. Each evaluator MUST:
+   - Connect to the already-running dev server (do NOT start another one)
    - Test via chrome-devtools (navigate, screenshot, click, fill forms)
    - Score every criterion with evidence
-   - Kill background processes before completing
-3. Wait for ALL evaluators to complete
-4. Collect all eval reports into a unified result
+4. Wait for ALL evaluators to complete
+5. Stop the dev server
+6. Collect all eval reports into a unified result
 
 **GATE 4 CHECK** — Before proceeding, verify ALL of:
 - [ ] I have an eval report for EVERY work unit
@@ -254,8 +257,8 @@ If an evaluator crashed → re-dispatch that evaluator. Do not proceed without c
 YES → proceed. NO → GO BACK TO PHASE 4."
 
 - **All criteria PASS** → `dk_push(mode: "pr")`. Create the PR. Done.
-- **Some criteria FAIL** (round < 3) → Re-dispatch ALL failed generators simultaneously
-  with evaluator feedback. Back to Phase 3 → Phase 4.
+- **Some criteria FAIL** (round < 3) → Execute Round Transition state reset, then
+  re-enter Phase 2 with only the failed units. Proceed through Phase 2 → 3 → 4 → 5.
 - **Still failing after round 3** → `dk_push(mode: "pr")` with issues documented in PR.
 
 **FINAL GATE**: The PR description MUST include the eval results (scores, pass rate, evidence
