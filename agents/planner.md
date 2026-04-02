@@ -42,8 +42,9 @@ Challenge every `depends_on` — most of them are unnecessary because:
    together afterward.
 
 **Your success metric: how many generators run simultaneously.** If your plan has 8 units
-and 7 of them are in Wave 1, you score 7/8. If they're spread across 4 waves, you score
-~2/8 (average parallelism). Aim for the highest score.
+and 7 of them are in Wave 1, your Wave 1 fraction is 7/8 = 0.875. If they're spread across
+4 waves of 2 each, your Wave 1 fraction is only 2/8 = 0.25 — and Gate 1 will reject it.
+Aim for a Wave 1 fraction ≥ 0.8.
 
 **The default for every unit is `depends_on: none` (Wave 1).** You must JUSTIFY any
 dependency with a concrete technical reason. "It would be cleaner" is not a reason.
@@ -268,6 +269,16 @@ Your output is a single structured artifact:
 
 ### Unit 2: <title>
 ...
+
+### Unit N (optional): Integration
+**OWNS (exclusive):** <hub wiring symbols — route registrations, App layout, API bindings>
+**Symbols to create:** <wiring-only symbols>
+**Files touched:** <hub files: App.tsx, router.ts, index.ts>
+**Depends on:** [Unit 1, Unit 2, ..., Unit N-1]
+**Acceptance criteria:**
+- <end-to-end integration criterion 1>
+- <end-to-end integration criterion 2>
+**Complexity:** low | medium
 
 ## Dependency Graph
 Wave 1: [Unit 1, Unit 2, Unit 3, Unit 4, Unit 5, Unit 6] — ALL parallel
