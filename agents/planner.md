@@ -199,7 +199,11 @@ dependency if you have a concrete technical reason that survives these challenge
    them into the hub.
 3. **If two units need the same type, each defines it locally.** Type duplication is fine —
    it's cheap and eliminates dependencies. An optional integration unit can unify them later.
-4. **dkod resolves conflicts automatically if they occur** — but avoiding them is faster.
+4. **Inline/local types are NOT listed in `OWNS:`.** Types inlined within a unit's own files
+   are implementation details, not globally-owned symbols. Only export-quality, globally-unique
+   symbols belong in `OWNS:`. This prevents false positives in Gate 1's duplicate-ownership
+   check when multiple units define the same type name locally.
+5. **dkod resolves conflicts automatically if they occur** — but avoiding them is faster.
    A well-planned decomposition should produce zero true conflicts.
 
 **The result should look like this:**
