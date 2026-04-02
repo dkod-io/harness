@@ -50,7 +50,10 @@ claude mcp add --transport http dkod https://api.dkod.io/mcp
 If chrome-devtools is missing, note that evaluation will be limited to `dk_verify` + code
 review (no live UI testing).
 
-## The Autonomous Loop
+## The Autonomous Loop — STRICT GATES
+
+Each phase produces a required artifact. The next phase CANNOT start until the gate check
+confirms the artifact exists. **Skipping a phase is a harness violation.**
 
 ```
 USER PROMPT
@@ -63,7 +66,12 @@ USER PROMPT
 │  • Decompose by SYMBOL, not file                    │
 │  • Define acceptance criteria per unit              │
 │  • Map dependencies between units                   │
-│  • Output: spec + work_units + criteria             │
+│                                                     │
+│  GATE 1 — Required output:                          │
+│  ✓ Specification with stack, features, data model   │
+│  ✓ Work units with symbols + acceptance criteria    │
+│  ✓ Dependency graph with wave assignments           │
+│  BLOCKED until all three exist.                     │
 └────────────────────┬────────────────────────────────┘
                      │
                      ▼
@@ -75,7 +83,13 @@ USER PROMPT
 │  • dk_context (understand target symbols)           │
 │  • dk_file_read → dk_file_write (implement)         │
 │  • dk_submit (changeset)                            │
-│  • Report completion                                │
+│  • Report with changeset_id                         │
+│                                                     │
+│  GATE 2 — Required output:                          │
+│  ✓ Every generator reported back                    │
+│  ✓ Every report includes a changeset_id             │
+│  ✓ List of all changeset IDs collected              │
+│  BLOCKED until all generators have submitted.       │
 └────────────────────┬────────────────────────────────┘
                      │
                      ▼
@@ -86,17 +100,31 @@ USER PROMPT
 │  • dk_approve each verified changeset               │
 │  • dk_merge each sequentially (only merge is serial)│
 │  • dk_resolve if conflicts (auto-resolve)           │
+│                                                     │
+│  GATE 3 — Required output:                          │
+│  ✓ Every changeset merged (or recorded as failed)   │
+│  ✓ Merged commit hash exists                        │
+│  BLOCKED until all changesets are landed.            │
 └────────────────────┬────────────────────────────────┘
                      │
                      ▼
 ┌─────────────────────────────────────────────────────┐
-│  PHASE 4: EVAL (parallel)                           │
+│  PHASE 4: EVAL (parallel) — MANDATORY               │
+│  *** YOU CANNOT SKIP THIS PHASE ***                  │
+│  *** dk_push IS BLOCKED UNTIL EVAL COMPLETES ***     │
+│                                                     │
 │  N evaluator agents dispatched simultaneously:      │
 │  • One evaluator per work unit (parallel)           │
-│  • Each tests their unit's criteria                 │
+│  • Each: start dev server, chrome-devtools test,    │
+│    grade criteria with evidence (screenshots)       │
 │  • One final evaluator for overall/integration      │
-│  • All use chrome-devtools + dk_verify              │
-│  • Grade: PASS/FAIL per criterion with evidence     │
+│                                                     │
+│  GATE 4 — Required output:                          │
+│  ✓ Eval report exists for EVERY work unit           │
+│  ✓ Each report has scores + evidence per criterion  │
+│  ✓ Overall integration report exists                │
+│  ✓ Every criterion scored (no unscored criteria)    │
+│  BLOCKED until all eval reports collected.           │
 └────────────────────┬────────────────────────────────┘
                      │
               ┌──────┴──────┐
@@ -106,62 +134,130 @@ USER PROMPT
               ▼             ▼
 ┌──────────────────┐  ┌──────────────────────────────┐
 │  PHASE 5: SHIP   │  │  PHASE 2b: FIX (parallel)    │
-│  dk_push(PR)     │  │  Re-dispatch generators with  │
-│  Done.           │  │  specific eval feedback.      │
-└──────────────────┘  │  Max 3 rounds total.          │
-                      │  Then back to LAND → EVAL.    │
-                      └──────────────────────────────┘
+│                  │  │  Re-dispatch generators with  │
+│  GATE 5:         │  │  specific eval feedback.      │
+│  ✓ Eval report   │  │  Max 3 rounds total.          │
+│    shows ALL     │  │  Then back to LAND → EVAL.    │
+│    PASS, OR      │  └──────────────────────────────┘
+│  ✓ Round 3       │
+│    exhausted     │
+│                  │
+│  dk_push(PR)     │
+│  Done.           │
+└──────────────────┘
 ```
 
-## Orchestrator Behavior
+### GATE ENFORCEMENT RULES
 
-The orchestrator (you, when this skill is active) drives the entire loop autonomously:
+**These are not guidelines. They are hard blocks.**
+
+1. **You CANNOT call `dk_push` without a completed eval report.** The eval report must contain
+   scores for every acceptance criterion. If you find yourself about to call `dk_push` and
+   you have not dispatched evaluator agents, STOP. You are skipping Phase 4.
+
+2. **You CANNOT dispatch evaluators without landed code.** All changesets must be merged first.
+   If you find yourself dispatching evaluators before `dk_merge`, STOP.
+
+3. **You CANNOT dispatch generators without a plan.** The plan must have work units with
+   acceptance criteria. If you find yourself writing code without a plan artifact, STOP.
+
+4. **Each phase checks the previous phase's gate.** Before starting Phase N, explicitly verify
+   that Phase N-1's required output exists:
+   - Phase 2 starts: "Do I have a plan with work units and criteria? YES → proceed"
+   - Phase 3 starts: "Do I have changeset IDs from all generators? YES → proceed"
+   - Phase 4 starts: "Is all code merged? Do I have a commit hash? YES → proceed"
+   - Phase 5 starts: "Do I have eval reports for every unit? YES → proceed"
+
+5. **dk_verify is NOT evaluation.** `dk_verify` runs lint/type-check/test. It does NOT start
+   the application, test the UI, check acceptance criteria, or produce scores. It is a code
+   quality gate in Phase 3. Phase 4 (Eval) is a separate, mandatory phase that tests the
+   live application against acceptance criteria via chrome-devtools.
+
+## Orchestrator Behavior — Phase-by-Phase with Gate Checks
+
+The orchestrator (you, when this skill is active) drives the entire loop autonomously.
+**Each phase has a gate check at entry and exit. Do not skip gates.**
 
 ### Phase 1: Plan
-1. Spawn the **planner** agent (subagent_type: not specified — use general-purpose with the
-   planner.md prompt injected)
+1. Spawn the **planner** agent
 2. Wait for the plan to complete
-3. Validate: does the plan have work units? Do units have acceptance criteria? Are dependencies
-   mapped?
-4. If the plan is too vague, re-run the planner with more specific instructions
+
+**GATE 1 CHECK** — Before proceeding, verify ALL of:
+- [ ] Plan contains a specification (stack, features, data model)
+- [ ] Plan contains work units with symbol-level decomposition
+- [ ] Every work unit has acceptance criteria (5+ testable criteria each)
+- [ ] Dependency graph exists with wave assignments
+- [ ] Overall acceptance criteria exist
+
+If any check fails → re-run the planner with specific feedback. Do not proceed.
 
 ### Phase 2: Build
-1. Read the work units from the plan
-2. Identify which units can run in parallel (no dependency on each other)
-3. Dispatch **generator** agents — one per work unit — all at once using multiple Agent tool
-   calls in a single message
-4. Each generator receives: the full spec, their specific work unit, and the acceptance criteria
-   they must satisfy
-5. Wait for all generators to complete
+**GATE 1 ENTRY CHECK**: "Do I have a validated plan? YES → proceed."
+
+1. Read the work units. Group by dependency wave.
+2. Dispatch ALL generators in the wave simultaneously (one Agent call per unit, all in a
+   single message)
+3. Wait for all generators in the wave to complete before starting the next wave
+
+**GATE 2 CHECK** — Before proceeding, verify ALL of:
+- [ ] Every generator has reported back
+- [ ] Every report includes a changeset_id
+- [ ] I have a complete list of changeset IDs
+
+If a generator crashed → re-dispatch that single generator. Do not proceed until all units
+have submitted changesets.
 
 ### Phase 3: Land
-1. **Verify in parallel**: Dispatch `dk_verify` for ALL submitted changesets simultaneously.
-   Each verification is independent — there's no reason to wait for one before starting another.
-2. **Approve all verified**: `dk_approve` each changeset that passed verification.
-3. **Merge sequentially** (only this step is serial): `dk_merge` each approved changeset
-   in dependency order. Each merge advances HEAD; the next must rebase against it.
-4. If `dk_merge` returns a conflict:
-   - For non-overlapping symbol changes: `dk_resolve` with `proceed` and retry
-   - For true conflicts: `dk_resolve` with `keep_yours` (trust the most recent generator's
-     intent), then re-verify
-5. If verification fails: add failures to the eval feedback for Phase 2b
+**GATE 2 ENTRY CHECK**: "Do I have changeset IDs from every generator? YES → proceed."
 
-### Phase 4: Eval
-1. **Dispatch parallel evaluators**: Spawn one evaluator agent per work unit — all in a
-   single message as parallel agents. Each evaluator tests only their unit's acceptance
-   criteria. Additionally, spawn one evaluator for overall/integration criteria.
-2. Wait for all evaluators to complete.
-3. Collect all eval reports, merge into a unified report.
-4. Count PASS vs FAIL across all units.
+1. **Verify in parallel**: `dk_verify` ALL changesets simultaneously
+2. **Approve all verified**: `dk_approve` each
+3. **Merge sequentially**: `dk_merge` each in dependency order
+4. Handle conflicts: `dk_resolve` → retry
+
+**GATE 3 CHECK** — Before proceeding, verify ALL of:
+- [ ] Every changeset is merged (or explicitly recorded as failed with reason)
+- [ ] A merged commit hash exists on the dkod main branch
+- [ ] I have noted any verification failures for the eval phase
+
+If merges failed → record failures, proceed to eval anyway (evaluator will catch issues).
+
+### Phase 4: Eval — MANDATORY, NEVER SKIP
+**GATE 3 ENTRY CHECK**: "Is code merged? Do I have a commit hash? YES → proceed."
+
+⚠️ **THIS PHASE IS NOT OPTIONAL. dk_verify IS NOT A SUBSTITUTE FOR EVALUATION.**
+⚠️ **YOU MUST DISPATCH EVALUATOR AGENTS BEFORE YOU CAN CALL dk_push.**
+
+1. **Dispatch parallel evaluators**: One evaluator per work unit + one for overall
+   integration criteria. All in a single message.
+2. Each evaluator MUST:
+   - Start the dev server (install deps, run dev command)
+   - Test via chrome-devtools (navigate, screenshot, click, fill forms)
+   - Score every criterion with evidence
+   - Kill background processes before completing
+3. Wait for ALL evaluators to complete
+4. Collect all eval reports into a unified result
+
+**GATE 4 CHECK** — Before proceeding, verify ALL of:
+- [ ] I have an eval report for EVERY work unit
+- [ ] I have an overall/integration eval report
+- [ ] Every acceptance criterion has a score (no unscored criteria)
+- [ ] Every score has evidence (screenshots, console output, test results)
+- [ ] Pass/fail counts are calculated
+
+If an evaluator crashed → re-dispatch that evaluator. Do not proceed without complete reports.
 
 ### Phase 5: Ship or Fix
-- **All criteria PASS**: `dk_push(mode: "pr")` — create the PR. Done. Report the PR URL.
-- **Some criteria FAIL** (round < 3):
-  - Extract the specific failures and which work units they map to
-  - Re-dispatch only the generators whose units failed, with the eval feedback injected
-  - Back to Phase 3 (Land) → Phase 4 (Eval)
-- **Still failing after 3 rounds**: `dk_push(mode: "pr")` anyway, note remaining issues in
-  the PR description. Report to user what passed and what didn't.
+**GATE 4 ENTRY CHECK**: "Do I have complete eval reports with scores for every criterion?
+YES → proceed. NO → GO BACK TO PHASE 4."
+
+- **All criteria PASS** → `dk_push(mode: "pr")`. Create the PR. Done.
+- **Some criteria FAIL** (round < 3) → Re-dispatch ALL failed generators simultaneously
+  with evaluator feedback. Back to Phase 3 → Phase 4.
+- **Still failing after round 3** → `dk_push(mode: "pr")` with issues documented in PR.
+
+**FINAL GATE**: The PR description MUST include the eval results (scores, pass rate, evidence
+summary). If the PR description doesn't reference eval results, you skipped Phase 4.
 
 ## Critical Design Principles
 
