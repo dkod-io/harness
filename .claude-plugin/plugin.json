@@ -1,0 +1,24 @@
+{
+  "name": "dkod-harness",
+  "version": "0.1.0",
+  "description": "Autonomous harness for parallel AI agent development. One prompt in, working tested app out. Powered by dkod's AST-level semantic merging and Anthropic's Planner-Generator-Evaluator architecture.",
+  "author": {
+    "name": "dkod",
+    "email": "hello@dkod.io"
+  },
+  "homepage": "https://dkod.io",
+  "repository": "https://github.com/dkod-io/harness",
+  "license": "MIT",
+  "keywords": [
+    "harness",
+    "autonomous",
+    "planner",
+    "generator",
+    "evaluator",
+    "parallel",
+    "multi-agent",
+    "dkod",
+    "ast-merge",
+    "mcp"
+  ]
+}

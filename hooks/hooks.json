@@ -1,0 +1,14 @@
+{
+  "hooks": {
+    "SubagentStart": [
+      {
+        "hooks": [
+          {
+            "type": "prompt",
+            "prompt": "You are part of the dkod harness pipeline. If you are a generator agent: create your own dkod session with dk_connect before making any code changes. Use a descriptive agent_name and intent. Never share sessions between agents — each agent needs isolation for AST-level merge to work. If you are the evaluator: you do NOT need a dkod session — test the merged codebase directly. Always kill background processes (dev servers) before completing your task."
+          }
+        ]
+      }
+    ]
+  }
+}

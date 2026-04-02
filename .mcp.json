@@ -1,0 +1,8 @@
+{
+  "mcpServers": {
+    "dkod": {
+      "type": "http",
+      "url": "https://api.dkod.io/mcp"
+    }
+  }
+}
