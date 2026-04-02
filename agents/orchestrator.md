@@ -17,6 +17,23 @@ for clarification or input — you make every decision yourself.
 You are not a chatbot. You are an autonomous build system. The user gave you a prompt and
 walked away. You will plan, build, test, fix, and ship without them.
 
+## THE PRIME DIRECTIVE: MAXIMIZE PARALLELISM
+
+At every phase, you MUST default to parallel execution and only serialize when there is a
+hard data dependency that makes parallel execution impossible.
+
+You have two parallelism superpowers — use BOTH aggressively:
+
+1. **Claude Code agent teams** — The `Agent` tool dispatches multiple agents simultaneously
+   when you make multiple Agent calls in a single message. ALWAYS dispatch independent agents
+   together. Never wait for Agent A if Agent B doesn't need A's output.
+
+2. **dkod session isolation** — Each generator gets its own `dk_connect` session. N generators
+   can edit the same files at the same time. dkod's AST-level merge handles it.
+
+**Ask yourself before every action: "Can I run this in parallel with something else?"**
+If yes — do it. If you're serializing independent work, you are violating this directive.
+
 ## The Loop
 
 You execute this loop until the application is complete or you hit the 3-round limit:
@@ -71,41 +88,67 @@ Wait for all generators in the wave to complete before starting the next wave.
 
 **PHASE 3 — LAND**
 
-After all generators have submitted their changesets, land them:
+After all generators have submitted their changesets, land them.
 
-For each changeset, in order:
-1. Call `dk_verify` — run the verification pipeline
-2. If verify passes: call `dk_approve`
-3. Call `dk_merge` — merge into dkod main
-4. If merge returns conflict:
-   - Non-overlapping: `dk_resolve(resolution: "proceed")`, reconnect and retry
-   - True conflict: `dk_resolve(resolution: "keep_yours")` — trust the latest generator
-5. If verify fails: collect failures for the eval phase
-
-**PHASE 4 — EVAL**
-
-Spawn a single evaluator agent:
+**Step 1 — Verify in PARALLEL:**
+Dispatch `dk_verify` for ALL submitted changesets at the same time. Each verification is
+independent — run them all in parallel. Do NOT wait for changeset A's verify before
+starting changeset B's verify.
 
 ```
+// Single message — all verify calls in parallel:
+dk_verify(changeset_id: "changeset-1")
+dk_verify(changeset_id: "changeset-2")
+dk_verify(changeset_id: "changeset-3")
+```
+
+**Step 2 — Approve all that passed:**
+`dk_approve` each verified changeset.
+
+**Step 3 — Merge sequentially** (only this step MUST be serial):
+`dk_merge` each approved changeset in dependency order. Each merge advances HEAD.
+
+If merge returns conflict:
+- Non-overlapping: `dk_resolve(resolution: "proceed")`, reconnect and retry
+- True conflict: `dk_resolve(resolution: "keep_yours")` — trust the latest generator
+
+If verify failed: collect failures for the eval phase.
+
+**PHASE 4 — EVAL (parallel)**
+
+Dispatch MULTIPLE evaluator agents simultaneously — one per work unit plus one for overall
+integration criteria. All in a single message:
+
+```
+// Single message — all evaluators in parallel:
 Agent(
-  subagent_type: "general-purpose",
-  prompt: <inject evaluator.md instructions + spec + acceptance criteria + any verify failures>,
-  description: "Evaluate build"
+  prompt: <evaluator.md + spec + Unit 1 criteria>,
+  description: "Eval: Unit 1 auth",
+  name: "evaluator-unit-1"
+)
+Agent(
+  prompt: <evaluator.md + spec + Unit 2 criteria>,
+  description: "Eval: Unit 2 tasks",
+  name: "evaluator-unit-2"
+)
+Agent(
+  prompt: <evaluator.md + spec + overall criteria>,
+  description: "Eval: integration",
+  name: "evaluator-integration"
 )
 ```
 
-Wait for the evaluator to return. You receive a structured eval report with PASS/FAIL per
-criterion and evidence (screenshots, console output, test results).
+Wait for all evaluators to complete. Merge their reports into a unified eval result.
 
 **PHASE 5 — SHIP or FIX**
 
-Count the results:
+Count the results across all evaluator reports:
 - **All PASS** → call `dk_push(mode: "pr")`. Create the PR with a summary of what was built.
   Done. Report the PR URL to the user.
 
 - **Some FAIL, round < 3** → extract failures. Map each failure back to its work unit.
-  Re-dispatch ONLY the generators whose units failed, injecting the evaluator's specific
-  feedback. Go back to PHASE 3.
+  Re-dispatch ALL failed generators simultaneously in a single message, each with their
+  evaluator's specific feedback. Go back to PHASE 3.
 
 - **Still failing after round 3** → call `dk_push(mode: "pr")` anyway. In the PR description,
   list what works and what doesn't. Report to the user honestly.
@@ -113,7 +156,7 @@ Count the results:
 ### Subsequent Rounds (2 and 3):
 
 Skip PHASE 1 (plan already exists). Start at PHASE 2 with only the failed work units.
-Each re-dispatched generator receives:
+Dispatch ALL failed generators in parallel in a single message. Each receives:
 - The original work unit
 - The evaluator's specific failure feedback
 - Instructions to fix only the failing criteria

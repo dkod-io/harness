@@ -82,23 +82,21 @@ USER PROMPT
 ┌─────────────────────────────────────────────────────┐
 │  PHASE 3: LAND                                      │
 │  Orchestrator merges all changesets:                 │
-│  • dk_verify each (lint, type-check, test)          │
-│  • dk_resolve if conflicts (auto: keep_yours for    │
-│    non-overlapping, surface true conflicts)         │
-│  • dk_approve each                                  │
-│  • dk_merge each (sequential — dkod AST merge)      │
+│  • dk_verify ALL changesets in PARALLEL              │
+│  • dk_approve each verified changeset               │
+│  • dk_merge each sequentially (only merge is serial)│
+│  • dk_resolve if conflicts (auto-resolve)           │
 └────────────────────┬────────────────────────────────┘
                      │
                      ▼
 ┌─────────────────────────────────────────────────────┐
-│  PHASE 4: EVAL                                      │
-│  Evaluator agent tests the merged result:           │
-│  • Start dev server (detect framework)              │
-│  • chrome-devtools: navigate, screenshot, click     │
-│  • Test each acceptance criterion                   │
-│  • dk_verify for code quality                       │
+│  PHASE 4: EVAL (parallel)                           │
+│  N evaluator agents dispatched simultaneously:      │
+│  • One evaluator per work unit (parallel)           │
+│  • Each tests their unit's criteria                 │
+│  • One final evaluator for overall/integration      │
+│  • All use chrome-devtools + dk_verify              │
 │  • Grade: PASS/FAIL per criterion with evidence     │
-│  • Produce structured eval report                   │
 └────────────────────┬────────────────────────────────┘
                      │
               ┌──────┴──────┐
@@ -137,21 +135,24 @@ The orchestrator (you, when this skill is active) drives the entire loop autonom
 5. Wait for all generators to complete
 
 ### Phase 3: Land
-1. For each completed changeset, in sequence:
-   - `dk_verify` — if verification fails, note the failures
-   - `dk_approve` — approve the changeset
-   - `dk_merge` — merge into dkod main
-2. If `dk_merge` returns a conflict:
+1. **Verify in parallel**: Dispatch `dk_verify` for ALL submitted changesets simultaneously.
+   Each verification is independent — there's no reason to wait for one before starting another.
+2. **Approve all verified**: `dk_approve` each changeset that passed verification.
+3. **Merge sequentially** (only this step is serial): `dk_merge` each approved changeset
+   in dependency order. Each merge advances HEAD; the next must rebase against it.
+4. If `dk_merge` returns a conflict:
    - For non-overlapping symbol changes: `dk_resolve` with `proceed` and retry
    - For true conflicts: `dk_resolve` with `keep_yours` (trust the most recent generator's
      intent), then re-verify
-3. If verification fails: add failures to the eval feedback for Phase 2b
+5. If verification fails: add failures to the eval feedback for Phase 2b
 
 ### Phase 4: Eval
-1. Spawn the **evaluator** agent
-2. Evaluator starts the dev server, tests via chrome-devtools, grades each criterion
-3. Read the eval report
-4. Count PASS vs FAIL
+1. **Dispatch parallel evaluators**: Spawn one evaluator agent per work unit — all in a
+   single message as parallel agents. Each evaluator tests only their unit's acceptance
+   criteria. Additionally, spawn one evaluator for overall/integration criteria.
+2. Wait for all evaluators to complete.
+3. Collect all eval reports, merge into a unified report.
+4. Count PASS vs FAIL across all units.
 
 ### Phase 5: Ship or Fix
 - **All criteria PASS**: `dk_push(mode: "pr")` — create the PR. Done. Report the PR URL.
@@ -163,6 +164,41 @@ The orchestrator (you, when this skill is active) drives the entire loop autonom
   the PR description. Report to user what passed and what didn't.
 
 ## Critical Design Principles
+
+### 0. MAXIMIZE PARALLELISM — THE PRIME DIRECTIVE
+
+This principle overrides all others. Every agent, at every phase, must default to parallel
+execution and only serialize when there is a hard dependency that makes it impossible.
+
+**You have two parallelism superpowers. Use both aggressively:**
+
+1. **Claude Code agent teams** — The `Agent` tool can dispatch multiple agents simultaneously
+   in a single message. Every time you have 2+ independent tasks, you MUST dispatch them as
+   parallel agents in one message. Never serialize independent work.
+
+2. **dkod session isolation** — Each agent gets its own `dk_connect` session with a
+   copy-on-write overlay. N agents can edit the same files, the same modules, even overlapping
+   areas of code — all at the same time. dkod's AST-level merge handles it.
+
+**The combination is the unlock:** Claude Code agent teams give you N parallel workers.
+dkod gives each worker an isolated workspace that merges cleanly. Together, they turn a
+60-minute serial build into a 10-minute parallel build.
+
+**This applies to EVERY phase:**
+- **Plan**: The planner designs for maximum Wave 1 coverage — flatten the dependency graph
+  so the most units run simultaneously.
+- **Build**: ALL generators in a wave dispatch in a single message as parallel agents.
+  Use `run_in_background: true` when you have other work to do while waiting.
+- **Land**: Run `dk_verify` on ALL changesets in parallel (each verify is independent).
+  Only `dk_merge` must be sequential (each merge advances HEAD).
+- **Eval**: Dispatch multiple evaluator agents in parallel — one per work unit — each
+  testing their unit's criteria simultaneously. Then one final evaluator for overall
+  integration criteria.
+- **Fix**: Re-dispatch ALL failed generators simultaneously, not one at a time.
+
+**Anti-pattern: serializing independent work.** If you find yourself waiting for Agent A
+to finish before dispatching Agent B, and B doesn't depend on A's output — you are wasting
+time. Dispatch both in the same message.
 
 ### 1. Decompose by symbol, not file
 The Planner MUST decompose work into units that target specific **functions, classes, and
