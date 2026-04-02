@@ -109,13 +109,13 @@ USER PROMPT
                      │
                      ▼
 ┌─────────────────────────────────────────────────────┐
-│  PHASE 4: EVAL (parallel) — MANDATORY               │
+│  PHASE 4: EVAL (sequential) — MANDATORY              │
 │  *** YOU CANNOT SKIP THIS PHASE ***                  │
 │  *** dk_push IS BLOCKED UNTIL EVAL COMPLETES ***     │
 │                                                     │
 │  Orchestrator starts dev server ONCE, then:         │
-│  N evaluator agents dispatched simultaneously:      │
-│  • One evaluator per work unit (parallel)           │
+│  Evaluators run ONE AT A TIME (shared browser):     │
+│  • One evaluator per work unit (sequential)         │
 │  • Each: connect to shared dev server, test via     │
 │    chrome-devtools, grade criteria with evidence     │
 │  • One final evaluator for overall/integration      │
@@ -233,15 +233,17 @@ from unmerged units. But if zero changesets merged, that's a hard block — re-d
 
 1. **Start the dev server ONCE** as the orchestrator (install deps, run dev command,
    wait for the port to be ready). Record the server URL.
-2. **Dispatch parallel evaluators**: One evaluator per work unit + one for overall
-   integration criteria. All in a single message. Pass the already-running server URL
-   to each evaluator — do NOT instruct them to start their own dev server.
+2. **Dispatch evaluators sequentially** (one at a time): One evaluator per work unit,
+   then one for overall integration. Pass the already-running server URL. Evaluators
+   run sequentially because they share a single chrome-devtools browser session —
+   parallel evaluators would race on navigate/screenshot/click calls, corrupting evidence.
 3. Each evaluator MUST:
    - Connect to the already-running dev server (do NOT start another one)
    - Test via chrome-devtools (navigate, screenshot, click, fill forms)
    - Score every criterion with evidence
-4. Wait for ALL evaluators to complete
-5. Stop the dev server
+   - It has exclusive browser access — no other evaluator runs concurrently
+4. Wait for each evaluator to complete before dispatching the next
+5. After the final (integration) evaluator completes, stop the dev server
 6. Collect all eval reports into a unified result
 
 **GATE 4 CHECK** — Before proceeding, verify ALL of:

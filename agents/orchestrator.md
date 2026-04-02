@@ -155,30 +155,43 @@ But if ZERO changesets merged (no code landed at all), that's a hard block.
 2. Wait for the server to be ready (check the port)
 3. Record the server URL (e.g., `http://localhost:5173`)
 
-Then dispatch MULTIPLE evaluator agents simultaneously, passing the already-running
-server URL to each. Do NOT instruct evaluators to start their own dev server — they
-share the single running instance:
+Then dispatch evaluators **sequentially** (one at a time), passing the already-running
+server URL. Evaluators MUST run sequentially because they share a single chrome-devtools
+browser session — parallel evaluators would race on `navigate_page`, `take_screenshot`,
+and `click` calls, corrupting each other's evidence.
+
+Do NOT instruct evaluators to start their own dev server.
 
 ```
-// Single message — all evaluators in parallel:
-Agent(
-  prompt: <evaluator.md + spec + Unit 1 criteria + "The dev server is already
-           running at <SERVER_URL>. Do NOT start another dev server. Connect to
-           the running server and test via chrome-devtools. Score every criterion.">,
-  description: "Eval: <unit title>",
-  name: "evaluator-unit-1"
-)
-// ... one per work unit
+// Dispatch evaluators ONE AT A TIME — wait for each to complete before the next:
+for each work_unit in active_units:
+  Agent(
+    prompt: <evaluator.md + spec + this unit's criteria + "The dev server is already
+             running at <SERVER_URL>. Do NOT start another dev server. Connect to
+             the running server and test via chrome-devtools. Score every criterion.
+             You have exclusive access to the browser — no other evaluator is running.">,
+    description: "Eval: <unit title>",
+    name: "evaluator-<unit-id>"
+  )
+  // WAIT for this evaluator to complete before dispatching the next
+
+// After all unit evaluators, run the integration evaluator:
 Agent(
   prompt: <evaluator.md + spec + overall criteria + "The dev server is already
            running at <SERVER_URL>. Do NOT start another dev server. Test
-           integration across all units. Verify the full application end-to-end.">,
+           integration across all units. Verify the full application end-to-end.
+           You have exclusive access to the browser.">,
   description: "Eval: integration",
   name: "evaluator-integration"
 )
 ```
 
-Wait for ALL evaluators to complete. Then stop the dev server.
+Wait for the integration evaluator to complete. Then stop the dev server.
+
+**Note on parallelism trade-off**: Sequential evaluation sacrifices speed for correctness.
+Each evaluator needs exclusive access to the chrome-devtools browser session to produce
+reliable evidence. This is the ONE phase where serialization is mandatory — all other
+phases (Build, Land) maximize parallelism as described in the Prime Directive.
 
 **═══ GATE 4 CHECK ═══**
 Before proceeding, verify:
