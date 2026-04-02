@@ -309,7 +309,7 @@ mandatory — its absence means you skipped Phase 4.**
 <List of failed criteria with fix hints from evaluator>
 
 ## Built autonomously by dkod-harness
-Planner → {N} parallel generators → {M} parallel evaluators
+Planner → {N} parallel generators → {M} sequential evaluators
 Total rounds: {rounds}
 ```
 

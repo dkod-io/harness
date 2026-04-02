@@ -295,9 +295,11 @@ dkod gives each worker an isolated workspace that merges cleanly. Together, they
   Use `run_in_background: true` when you have other work to do while waiting.
 - **Land**: Run `dk_verify` on ALL changesets in parallel (each verify is independent).
   Only `dk_merge` must be sequential (each merge advances HEAD).
-- **Eval**: Dispatch multiple evaluator agents in parallel — one per work unit — each
-  testing their unit's criteria simultaneously. Then one final evaluator for overall
-  integration criteria.
+- **Eval**: **Exception to parallel dispatch.** Evaluators run sequentially (one at a
+  time) because they share a single chrome-devtools browser session. Parallel evaluators
+  would race on navigate/screenshot/click calls, corrupting evidence. Dispatch one
+  evaluator per work unit, wait for it to complete, then dispatch the next. Final
+  evaluator runs overall integration criteria.
 - **Fix**: Re-dispatch ALL failed generators simultaneously, not one at a time.
 
 **Anti-pattern: serializing independent work.** If you find yourself waiting for Agent A
