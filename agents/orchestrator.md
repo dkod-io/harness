@@ -327,3 +327,4 @@ overall_pass_rate: "X/Y"          # Computed from eval_reports
 
 **Self-check before dk_push**: "Is eval_reports populated with scores for every criterion?
 If NO → I have not completed Phase 4. Go back."
+
