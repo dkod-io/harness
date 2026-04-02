@@ -102,9 +102,9 @@ USER PROMPT
 │  • dk_resolve if conflicts (auto-resolve)           │
 │                                                     │
 │  GATE 3 — Required output:                          │
-│  ✓ Every changeset merged (or recorded as failed)   │
-│  ✓ Merged commit hash exists                        │
-│  BLOCKED until all changesets are landed.            │
+│  ✓ Every changeset merged OR recorded as failed     │
+│  ✓ At least one merged (commit hash exists)         │
+│  BLOCKED until all changesets are resolved.          │
 └────────────────────┬────────────────────────────────┘
                      │
                      ▼
@@ -164,8 +164,8 @@ USER PROMPT
 4. **Each phase checks the previous phase's gate.** Before starting Phase N, explicitly verify
    that Phase N-1's required output exists:
    - Phase 2 starts: "Do I have a plan with work units and criteria? YES → proceed"
-   - Phase 3 starts: "Do I have changeset IDs from all generators? YES → proceed"
-   - Phase 4 starts: "Is all code merged? Do I have a commit hash? YES → proceed"
+   - Phase 3 starts: "Do I have changeset IDs from all dispatched generators? YES → proceed"
+   - Phase 4 starts: "Did at least one changeset merge? Do I have a commit hash? YES → proceed"
    - Phase 5 starts: "Do I have eval reports for every unit? YES → proceed"
 
 5. **dk_verify is NOT evaluation.** `dk_verify` runs lint/type-check/test. It does NOT start
@@ -200,15 +200,16 @@ If any check fails → re-run the planner with specific feedback. Do not proceed
 3. Wait for all generators in the wave to complete before starting the next wave
 
 **GATE 2 CHECK** — Before proceeding, verify ALL of:
-- [ ] Every generator has reported back
+- [ ] Every generator in the current dispatch (all units in round 1, only failed units
+  in rounds 2+) has reported back
 - [ ] Every report includes a changeset_id
-- [ ] I have a complete list of changeset IDs
+- [ ] I have a complete list of changeset IDs for this round's units
 
-If a generator crashed → re-dispatch that single generator. Do not proceed until all units
-have submitted changesets.
+If a generator crashed → re-dispatch that single generator. Do not proceed until all
+dispatched generators have submitted changesets.
 
 ### Phase 3: Land
-**GATE 2 ENTRY CHECK**: "Do I have changeset IDs from every generator? YES → proceed."
+**GATE 2 ENTRY CHECK**: "Do I have changeset IDs from every dispatched generator? YES → proceed."
 
 1. **Verify in parallel**: `dk_verify` ALL changesets simultaneously
 2. **Approve all verified**: `dk_approve` each
@@ -216,14 +217,15 @@ have submitted changesets.
 4. Handle conflicts: `dk_resolve` → retry
 
 **GATE 3 CHECK** — Before proceeding, verify ALL of:
-- [ ] Every changeset is merged (or explicitly recorded as failed with reason)
-- [ ] A merged commit hash exists on the dkod main branch
-- [ ] I have noted any verification failures for the eval phase
+- [ ] Every changeset is either merged OR explicitly recorded as failed with reason
+- [ ] At least one changeset merged successfully (commit hash exists)
+- [ ] Merge/verification failures are recorded for the eval phase
 
-If merges failed → record failures, proceed to eval anyway (evaluator will catch issues).
+Partial merge failures are tolerable — the evaluator will catch missing functionality
+from unmerged units. But if zero changesets merged, that's a hard block — re-dispatch.
 
 ### Phase 4: Eval — MANDATORY, NEVER SKIP
-**GATE 3 ENTRY CHECK**: "Is code merged? Do I have a commit hash? YES → proceed."
+**GATE 3 ENTRY CHECK**: "Did at least one changeset merge? Do I have a commit hash? YES → proceed."
 
 ⚠️ **THIS PHASE IS NOT OPTIONAL. dk_verify IS NOT A SUBSTITUTE FOR EVALUATION.**
 ⚠️ **YOU MUST DISPATCH EVALUATOR AGENTS BEFORE YOU CAN CALL dk_push.**

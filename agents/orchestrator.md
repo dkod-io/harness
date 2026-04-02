@@ -47,8 +47,10 @@ mode — guard against it explicitly.**
 ```
 round: 1                    # Current round (1, 2, or 3)
 plan: null                  # Set after Phase 1
-changeset_ids: []           # Set after Phase 2
-merged_commit: null         # Set after Phase 3
+active_units: []            # All units in round 1; only failed units in rounds 2+
+changeset_ids: []           # Set after Phase 2 — one per unit in active_units
+merged_commit: null         # Set after Phase 3 — latest commit hash
+merge_failures: []          # Changesets that failed to merge
 eval_reports: []            # Set after Phase 4 — MUST EXIST before dk_push
 ```
 
@@ -102,9 +104,13 @@ Wait for all generators in the wave. Then next wave.
 
 **═══ GATE 2 CHECK ═══**
 Before proceeding, verify:
-- [ ] Every generator has reported back
+- [ ] Every generator in `active_units` has reported back
 - [ ] Every report includes a changeset_id
-- [ ] `changeset_ids` list is complete (one per unit)
+- [ ] `changeset_ids` has one entry per unit in `active_units`
+
+In round 1, `active_units` = all plan units. In rounds 2+, `active_units` = only the
+units that failed in the previous eval. Gate 2 checks against `active_units`, not all
+plan units.
 
 **If gate fails** → re-dispatch crashed generators. Do NOT proceed until all have submitted.
 **If gate passes** → set `changeset_ids = [...]`. Proceed to Phase 3.
@@ -123,12 +129,15 @@ Handle conflicts: `dk_resolve` → retry merge.
 
 **═══ GATE 3 CHECK ═══**
 Before proceeding, verify:
-- [ ] All changesets are merged (or explicitly recorded as failed)
-- [ ] A merged commit hash exists
-- [ ] Verification failures are recorded for eval
+- [ ] Every changeset is either merged OR recorded in `merge_failures` with reason
+- [ ] At least one changeset merged successfully (a `merged_commit` hash exists)
+- [ ] Verification/merge failures are recorded for the eval phase
 
-**If gate fails** → resolve remaining merges. Do NOT proceed without merged code.
-**If gate passes** → set `merged_commit = <hash>`. Proceed to Phase 4.
+Partial merge failures are tolerable — the evaluator will catch missing functionality.
+But if ZERO changesets merged (no code landed at all), that's a hard block.
+
+**If zero merges** → all generators failed. Re-run planner or re-dispatch generators.
+**If some merged** → set `merged_commit = <hash>`, record `merge_failures`. Proceed to Phase 4.
 
 ---
 
@@ -202,10 +211,29 @@ If the PR description doesn't include eval results → you skipped Phase 4.
 
 ---
 
+### Round Transition (before re-entering Phase 2):
+
+When Phase 5 decides to fix, explicitly reset state before the next round:
+
+```
+# ROUND TRANSITION — execute this before re-entering Phase 2:
+round += 1
+active_units = [only the units whose criteria failed in eval]
+changeset_ids = []          # wiped — new generators will repopulate
+merged_commit = null        # wiped — new merges will set this
+merge_failures = []         # wiped
+eval_reports = []           # wiped — new evaluators will repopulate
+# plan remains unchanged
+```
+
+**Do NOT carry stale state.** If `changeset_ids` from round 1 persists into round 2,
+Gate 2 may incorrectly pass. If `eval_reports` from round 1 persists, Gate 4 may
+incorrectly pass. Wipe them.
+
 ### Subsequent Rounds (2 and 3):
 
-Skip Phase 1 (plan exists). Start at Phase 2 with ONLY the failed work units.
-Dispatch ALL failed generators in parallel. Each receives:
+After state reset, skip Phase 1 (plan exists). Enter Phase 2 with `active_units`
+(only the failed units). Dispatch ALL failed generators in parallel. Each receives:
 - The original work unit
 - The evaluator's specific failure feedback + evidence
 - Instructions to fix only the failing criteria
@@ -279,9 +307,11 @@ gate check requires it, you have skipped a phase.
 ```
 round: 1                          # Current round (1, 2, or 3)
 plan: <plan artifact>             # Set after Gate 1 passes
-changeset_ids: [...]              # Set after Gate 2 passes
-merge_results: { hash, failures } # Set after Gate 3 passes
-eval_reports: [...]               # Set after Gate 4 passes — MUST EXIST before dk_push
+active_units: [...]               # All units in round 1; only failed units in rounds 2+
+changeset_ids: []                 # Set after Gate 2 — one per unit in active_units
+merged_commit: null               # Set after Gate 3 — latest commit hash after all merges
+merge_failures: []                # Changesets that failed to merge (recorded, not blocking)
+eval_reports: []                  # Set after Gate 4 — MUST EXIST before dk_push
 overall_pass_rate: "X/Y"          # Computed from eval_reports
 ```
 
