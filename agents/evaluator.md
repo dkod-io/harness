@@ -173,6 +173,7 @@ reaches its final, data-loaded state — not just that it renders an initial she
 
 **Scoring stuck loading states:**
 - Page stuck on a spinner/loading text forever → **3/10 max** (broken data flow)
+- Page shows spinner then error message → **4/10** (error handled, but feature non-functional)
 - Page loads but takes 5-10 seconds → **5/10** (functional but unacceptably slow)
 - Page loads in 2-5 seconds → **7/10** (acceptable)
 - Page loads under 1 second → **9-10/10** (good to optimal)
