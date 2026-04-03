@@ -227,13 +227,11 @@ visible effect. If it doesn't, that's a failure.
    ```
    evaluate_script(expression: `
      (() => {
-       const interactive = [
-         ...new Set([
-           ...document.querySelectorAll('button, [role="button"], a[href], input, select, textarea'),
-           ...document.querySelectorAll('[onclick], [tabindex="0"], .clickable, [class*="btn"]')
-         ])
-       ];
-       return interactive
+       const interactive = document.querySelectorAll(
+           'button, [role="button"], a[href], input, select, textarea, ' +
+           '[onclick], [tabindex="0"], .clickable, [class*="btn"]'
+         );
+       return [...interactive]
          .filter(el => {
            const style = window.getComputedStyle(el);
            const isVisible = style.display !== 'none' && style.visibility !== 'hidden' &&
@@ -288,7 +286,7 @@ visible effect. If it doesn't, that's a failure.
    ```
 
    Run this BEFORE the click and AFTER the click. If the two snapshots are identical
-   (same URL, same title, same modal count, same body text) → the element did nothing.
+   (same URL, same title, same modal count, same alert count, same body text) → the element did nothing.
 
 3. **Score dead interactive elements:**
    - Button/link that is visible and non-disabled but produces NO effect when clicked →
@@ -301,7 +299,7 @@ visible effect. If it doesn't, that's a failure.
 - **Always test**: Buttons with text (they are explicit affordances — the user expects them to work)
 - **Always test**: Navigation links
 - **Always test**: Form submit buttons
-- **Skip**: Decorative elements, disabled buttons (they're intentionally inert), external links
+- **Skip**: Decorative elements, disabled buttons (they're intentionally inert), external links, data-entry inputs (text fields, textareas, selects — clicking only focuses them)
 - **Sample test**: If there are 20 identical list-item buttons, test 2-3 representative ones
 
 **Why this matters:** Generators often create UI that LOOKS complete — all the buttons render
