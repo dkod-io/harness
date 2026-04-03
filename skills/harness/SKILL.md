@@ -53,6 +53,11 @@ claude mcp add --transport http dkod https://api.dkod.io/mcp
 If chrome-devtools is missing, note that evaluation will be limited to `dk_verify` + code
 review (no live UI testing).
 
+If frontend-design skill is missing, generators MUST still follow the Design Direction section
+from the spec manually. The planner's Design Direction section provides all the creative
+direction needed — generators should treat it as their design brief and apply it directly
+without invoking the skill.
+
 ## The Autonomous Loop — STRICT GATES
 
 Each phase produces a required artifact. The next phase CANNOT start until the gate check
@@ -192,6 +197,9 @@ The orchestrator (you, when this skill is active) drives the entire loop autonom
 - [ ] Every work unit has acceptance criteria (5+ testable criteria each)
 - [ ] Dependency graph exists with wave assignments
 - [ ] Overall acceptance criteria exist
+- [ ] **For UI projects**: Spec includes a `## Design Direction` section with a concrete
+  aesthetic tone (not "modern and clean"), hex color values, and named font choices
+  (not "Arial", "Inter", "Roboto", or system defaults)
 
 If any check fails → re-run the planner with specific feedback. Do not proceed.
 

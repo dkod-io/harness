@@ -105,7 +105,7 @@ for i in $(seq 1 30); do curl -s http://localhost:5173 > /dev/null && break || s
 If the server fails to start, that's a FAIL on the "application starts" criterion.
 Record the error output as evidence.
 
-### Step 5: Test via Chrome DevTools
+### Step 5a: Test via Chrome DevTools
 
 Use the chrome-devtools MCP tools to test the live application.
 
@@ -254,9 +254,9 @@ gates shipping just like any other criterion — it must be ≥ 7 to PASS.
 
 ### Step 5c: Interactive Element Audit — MANDATORY
 
-**⚠️ BEYOND testing acceptance criteria, you MUST audit every interactive element on every
-page.** A button that renders but does nothing when clicked is a broken feature — even if
-no acceptance criterion explicitly mentions it.
+**⚠️ BEYOND testing acceptance criteria, you MUST audit the interactive elements on every
+page using judgment.** A button that renders but does nothing when clicked is a broken
+feature — even if no acceptance criterion explicitly mentions it.
 
 **The principle:** If the UI presents an element that invites user interaction (a button,
 a link, a form input, a toggle, a dropdown), then clicking/activating it MUST produce a
