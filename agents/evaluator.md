@@ -242,6 +242,9 @@ palette, typography, and spatial composition. Score the implementation against i
    - Empty states: do empty lists show a message or just blank space?
 
 **Scoring design quality:**
+- No styling applied (unstyled HTML, browser defaults, no CSS) → **1/10**
+- Minimal styling present but broken layout (overlapping elements, broken responsive) → **2/10**
+- Basic styling with structural issues (inconsistent spacing, clashing colors, poor contrast) → **3/10**
 - Generic "AI slop" (default fonts, purple gradients, cookie-cutter cards, no personality) → **4/10 max**
 - Functional but bland (correct layout, no visual distinction, forgettable) → **5/10**
 - Competent with some intentional choices (custom colors, decent spacing) → **6/10**
@@ -427,6 +430,7 @@ Output a structured report:
 |-----------|-------|--------|----------|
 | App starts without errors | 10/10 | PASS | Server started on :5173 in 2.3s |
 | No console errors | 6/10 | FAIL | 3 React hydration warnings, 1 unhandled promise rejection |
+| Design Quality | 7/10 | PASS | Cohesive palette, custom fonts loaded, consistent spacing. Minor: no hover transitions on cards. |
 
 ## Failed Criteria Summary
 <List of all failed criteria with their fix hints, grouped by work unit>
