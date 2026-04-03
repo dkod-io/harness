@@ -242,7 +242,13 @@ visible effect. If it doesn't, that's a failure.
            const isInternalLink = !el.href ||
              el.href.startsWith(window.location.origin) ||
              el.href.startsWith('#');
-           return isVisible && (el.tagName !== 'A' || isInternalLink);
+           // Exclude data-entry inputs (text, email, password, etc.) — clicking
+           // these only focuses the field, producing no detectable state change
+           const dataEntryTypes = ['text','email','password','number','search','tel','url'];
+           const isDataEntry = (el.tagName === 'TEXTAREA') ||
+             (el.tagName === 'SELECT') ||
+             (el.tagName === 'INPUT' && dataEntryTypes.includes(el.type));
+           return isVisible && !isDataEntry && (el.tagName !== 'A' || isInternalLink);
          })
          .map(el => ({
            tag: el.tagName,
