@@ -248,7 +248,7 @@ Before proceeding, verify:
 If eval_reports is empty → **STOP. YOU SKIPPED PHASE 4. GO BACK.**
 
 Count results:
-- **All criteria PASS** → `dk_push(mode: "pr")`. Include eval summary in PR description.
+- **All criteria PASS** → Set `pushed = true`, then `dk_push(mode: "pr")`. Include eval summary in PR description.
   Done. Report the PR URL.
 
 - **Some FAIL, round < 3** → Execute the Round Transition
@@ -256,7 +256,7 @@ Count results:
   failed units. Each generator gets their evaluator's specific feedback.
   Then proceed through Phase 3 → Phase 4 → Phase 5.
 
-- **Round 3 exhausted** → `dk_push(mode: "pr")` with issues documented. Report honestly.
+- **Round 3 exhausted** → Set `pushed = true`, then `dk_push(mode: "pr")` with issues documented. Report honestly.
 
 **The PR description MUST include:**
 ```markdown
@@ -277,6 +277,9 @@ When Phase 5 decides to fix, explicitly reset state before the next round:
 # ROUND TRANSITION — execute this before re-entering Phase 2:
 round += 1
 active_units = [only the units whose criteria failed in eval]
+waves = [active_units]      # rebuild — all failed units go to Wave 1 (deps already met)
+current_wave = 0            # reset — start from Wave 1
+pushed = false              # reset — not yet shipped this round
 changeset_ids = []          # wiped — new generators will repopulate
 merged_commit = null        # wiped — new merges will set this
 merge_failures = []         # wiped
@@ -374,11 +377,14 @@ gate check requires it, you have skipped a phase.
 ```
 round: 1                          # Current round (1, 2, or 3)
 plan: <plan artifact>             # Set after Gate 1 passes
+waves: []                         # Ordered list of waves from the plan
+current_wave: 0                   # Index of wave being built/landed
 active_units: [...]               # All units in round 1; only failed units in rounds 2+
 changeset_ids: []                 # Set after Gate 2 — one per unit in active_units
 merged_commit: null               # Set after Gate 3 — latest commit hash after all merges
 merge_failures: []                # Changesets that failed to merge (recorded, not blocking)
 eval_reports: []                  # Set after Gate 4 — MUST EXIST before dk_push
+pushed: false                     # Set ONLY in Phase 5 — dk_push is FORBIDDEN before Phase 5
 overall_pass_rate: "X/Y"          # Computed from eval_reports
 ```
 
@@ -386,4 +392,5 @@ overall_pass_rate: "X/Y"          # Computed from eval_reports
 1. "Is `eval_reports` populated with scores for every criterion? If NO → STOP. Phase 4 incomplete."
 2. "Am I in Phase 5? If NO → STOP. dk_push is only allowed in Phase 5."
 3. "Did I just finish landing a wave with more waves remaining? If YES → STOP. Build the next wave first."
+4. "Is `pushed` already `true`? If YES → STOP. Already shipped — do not push again."
 

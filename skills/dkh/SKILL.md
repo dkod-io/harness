@@ -105,11 +105,14 @@ USER PROMPT
 │  More waves? → loop back to BUILD next wave         │
 │  All waves done? → proceed to EVAL                  │
 │                                                     │
-│  GATE 2+3 — Required output (after ALL waves):      │
-│  ✓ Every generator reported back with changeset_id  │
+│  GATE 2+3 — Checked after EACH wave (Build + Land): │
+│  ✓ Every generator in this wave reported back       │
+│    with a changeset_id (GATE 2, per wave)           │
 │  ✓ Every changeset merged OR recorded as failed     │
-│  ✓ At least one merged (commit hash exists)         │
-│  BLOCKED until all waves are built and landed.      │
+│    (GATE 3, per wave)                               │
+│  ✓ At least one changeset merged (commit hash       │
+│    exists) before proceeding to the next wave       │
+│  BLOCKED until the current wave fully resolves.     │
 └────────────────────┬────────────────────────────────┘
                      │
                      ▼
