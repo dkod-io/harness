@@ -220,6 +220,30 @@ list_console_messages()
 **KEY: A spinner that never resolves is NOT a 5 or 6. It is a 3.** The user gets zero value.
 The feature is broken. Don't be generous because "the UI shell looks nice."
 
+### Example: "Interactive element that renders but doesn't work"
+
+**The second most commonly missed failure.** Generators create buttons with correct labels
+and styling, but the event handlers are missing, unbound, or call non-existent functions.
+The element looks perfect in a screenshot but does nothing when clicked.
+
+| What you see | Score | Reasoning |
+|-------------|-------|-----------|
+| Button/link renders but clicking produces no visible effect | 3 | **Dead UI** — element exists visually but is non-functional. No different from a static image. |
+| Button clicks but throws a console error (no UI feedback) | 3 | Broken handler — user sees nothing happen |
+| Button clicks, console error, but UI shows an error message | 4 | At least the failure is communicated |
+| Button works for the primary action but silently fails on edge cases | 5 | Partial implementation |
+| Button works correctly and produces the expected UI change | 7 | **Pass threshold** |
+| Above + loading state during async action | 8 | Good UX |
+| Above + optimistic update + rollback on failure | 9 | Polished |
+
+**KEY: An element that renders but does nothing on click is NOT a 5 or 6. It is a 3.**
+It's visual decoration with zero functionality. The user clicks it, nothing happens, and
+they think the app is broken — because it is.
+
+**How to catch this:** You MUST click every visible button and link on every page. Compare
+screenshots before and after the click. If the screenshots are identical (same URL, same
+content, no modal, no state change), the element is dead. Check the console for errors.
+
 ## Fallback: Testing Without Chrome DevTools
 
 If chrome-devtools MCP is unavailable, use Bash-based testing:

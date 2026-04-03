@@ -210,6 +210,91 @@ lighthouse_audit → check performance score
 list_console_messages → check for errors/warnings
 ```
 
+### Step 5b: Interactive Element Audit — MANDATORY
+
+**⚠️ BEYOND testing acceptance criteria, you MUST audit every interactive element on every
+page.** A button that renders but does nothing when clicked is a broken feature — even if
+no acceptance criterion explicitly mentions it.
+
+**The principle:** If the UI presents an element that invites user interaction (a button,
+a link, a form input, a toggle, a dropdown), then clicking/activating it MUST produce a
+visible effect. If it doesn't, that's a failure.
+
+**For each page you visit, run this audit:**
+
+1. **Discover all interactive elements** on the page:
+
+   ```
+   evaluate_script(expression: `
+     (() => {
+       const interactive = [
+         ...document.querySelectorAll('button, [role="button"], a[href], input, select, textarea'),
+         ...document.querySelectorAll('[onclick], [tabindex="0"], .clickable, [class*="btn"]')
+       ];
+       return interactive
+         .filter(el => {
+           const style = window.getComputedStyle(el);
+           return style.display !== 'none' && style.visibility !== 'hidden' &&
+                  style.opacity !== '0' && el.offsetParent !== null;
+         })
+         .map(el => ({
+           tag: el.tagName,
+           type: el.type || null,
+           text: (el.textContent || el.value || el.placeholder || '').trim().slice(0, 60),
+           id: el.id || null,
+           class: el.className?.toString().slice(0, 80) || null,
+           disabled: el.disabled || el.getAttribute('aria-disabled') === 'true',
+           href: el.href || null
+         }));
+     })()
+   `)
+   ```
+
+2. **For each visible, non-disabled interactive element**, test it:
+   - `take_screenshot` — state BEFORE clicking
+   - `click` the element
+   - Wait 2 seconds for any effect (navigation, modal, state change, animation)
+   - `take_screenshot` — state AFTER clicking
+   - `evaluate_script` — compare: did the URL change? Did a modal open? Did content
+     change? Did any DOM element get added/removed/modified?
+
+   ```
+   evaluate_script(expression: `
+     (() => {
+       // Capture a snapshot of visible page state to compare before/after click
+       return {
+         url: window.location.href,
+         title: document.title,
+         modalCount: document.querySelectorAll('[role="dialog"], .modal, [class*="modal"], [class*="overlay"]').length,
+         alertCount: document.querySelectorAll('[role="alert"], .alert, .toast, [class*="notification"]').length,
+         bodyText: document.body.innerText.slice(0, 500)
+       };
+     })()
+   `)
+   ```
+
+   Run this BEFORE the click and AFTER the click. If the two snapshots are identical
+   (same URL, same title, same modal count, same body text) → the element did nothing.
+
+3. **Score dead interactive elements:**
+   - Button/link that is visible and non-disabled but produces NO effect when clicked →
+     **FAIL** — score the related criterion at **3/10 max**
+   - If no explicit criterion covers this element, add it to the eval report as an
+     **uncovered finding**: "Resign button is visible and clickable but produces no
+     effect. No console error on click. Likely a missing or unbound event handler."
+
+**You do NOT need to test every single element exhaustively** — use judgment:
+- **Always test**: Buttons with text (they are explicit affordances — the user expects them to work)
+- **Always test**: Navigation links
+- **Always test**: Form submit buttons
+- **Skip**: Decorative elements, disabled buttons (they're intentionally inert), external links
+- **Sample test**: If there are 20 identical list-item buttons, test 2-3 representative ones
+
+**Why this matters:** Generators often create UI that LOOKS complete — all the buttons render
+with correct labels and styling — but the event handlers are missing, unbound, or call
+functions that don't exist. The only way to catch this is to click the elements and check
+that something happens. Reading the code is not enough — the evaluator must interact.
+
 ### Step 6: Score Each Criterion
 
 For EVERY acceptance criterion (per-unit and overall), produce a score:
@@ -323,6 +408,10 @@ Before finalizing your report, ask yourself:
 - [ ] Did I test with real inputs, or did I assume it works?
 - [ ] Did I check error states, not just happy paths?
 - [ ] Did I verify the UI actually renders, not just that components exist?
+- [ ] **Did I click every visible button and link?** A button that renders but does nothing
+  when clicked is BROKEN, not "implemented." Did I verify that clicks produce effects?
+- [ ] **Did I compare before/after screenshots for every interaction?** If the screenshots
+  are identical, the interaction did nothing — that's a failure.
 - [ ] **Did I confirm that loading states resolve?** A page showing "Loading..." forever
   is BROKEN, not "partially working." Did I wait for actual data to appear?
 - [ ] **Did I check for stuck spinners?** After every navigation, did I verify that
