@@ -107,22 +107,75 @@ Record the error output as evidence.
 
 ### Step 5: Test via Chrome DevTools
 
-Use the chrome-devtools MCP tools to test the live application:
+Use the chrome-devtools MCP tools to test the live application.
 
-**Navigation and Visual Testing:**
-```
-navigate_page → http://localhost:5173 (or detected port)
-take_screenshot → capture initial state
-```
+**⚠️ CRITICAL: VERIFY THAT PAGES FINISH LOADING ⚠️**
 
-**For each UI criterion:**
+A page that renders a spinner is NOT a working page. You must confirm that every page
+reaches its final, data-loaded state — not just that it renders an initial shell.
+
+**After EVERY navigation, follow this 3-step check:**
+
+1. **Screenshot the initial state** — this captures whatever the page shows first
+   (may be a loading spinner, skeleton, or instant content).
+
+2. **Detect and wait for loading to complete** — use `evaluate_script` to inspect the
+   page for active loading indicators. You don't know what selectors the app uses, so
+   probe dynamically:
+
+   ```
+   evaluate_script(expression: `
+     (() => {
+       // Detect common loading patterns — adapt to what you find on the page
+       const isActiveLoadingClass = (cls) =>
+         /(^|[\s-])(spinner|loading|skeleton)([\s-]|$)/i.test(cls) &&
+         !/(complete|done|finished|hidden|loaded)/i.test(cls);
+       const indicators = [
+         ...document.querySelectorAll('[aria-busy="true"]'),
+         ...[...document.querySelectorAll('[class]')].filter(el =>
+           isActiveLoadingClass(el.className)
+         ),
+         ...[...document.querySelectorAll('*')].filter(el =>
+           el.children.length === 0 &&
+           /^(loading|please wait)/i.test(el.textContent.trim())
+         )
+       ];
+       return {
+         isLoading: indicators.length > 0,
+         indicators: indicators.map(el => ({
+           tag: el.tagName,
+           class: el.className,
+           text: el.textContent.trim().slice(0, 50)
+         }))
+       };
+     })()
+   `)
+   ```
+
+   If `isLoading` is true, wait 10 seconds and check again. If still loading after 10s,
+   the page is stuck — that's a failure.
+
+3. **Screenshot the final state** — this must show actual content, not a loading indicator.
+   Compare with the initial screenshot. If they look the same and both show a spinner,
+   the page never loaded.
+
+**For each UI criterion, follow this pattern:**
 1. `navigate_page` to the relevant page/route
-2. `take_screenshot` — capture the state BEFORE interaction
-3. `click`, `fill`, `type_text`, `press_key` — perform the interaction
-4. `wait_for` — wait for the expected result
-5. `take_screenshot` — capture the state AFTER interaction
-6. `evaluate_script` — check DOM state, data attributes, computed styles
-7. `list_console_messages` — check for JavaScript errors
+2. `take_screenshot` — initial state
+3. `evaluate_script` — detect loading indicators (as above). If found, wait up to 10
+   seconds for them to clear. If they don't clear → FAIL (score ≤ 3)
+4. `take_screenshot` — final loaded state (your evidence for scoring)
+5. `list_console_messages` — check for errors (failed fetches cause stuck spinners)
+6. `click`, `fill`, `type_text`, `press_key` — perform interactions
+7. `wait_for` — wait for the expected result of the interaction
+8. `take_screenshot` — post-interaction state
+9. `evaluate_script` — verify expected DOM changes
+
+**Scoring stuck loading states:**
+- Page stuck on a spinner/loading text forever → **3/10 max** (broken data flow)
+- Page loads but takes 5-10 seconds → **5/10** (functional but unacceptably slow)
+- Page loads in 2-5 seconds → **7/10** (acceptable)
+- Page loads under 1 second → **9-10/10** (good to optimal)
 
 **For API criteria:**
 ```
@@ -269,7 +322,11 @@ Before finalizing your report, ask yourself:
 - [ ] Did I test with real inputs, or did I assume it works?
 - [ ] Did I check error states, not just happy paths?
 - [ ] Did I verify the UI actually renders, not just that components exist?
-- [ ] Did I check the console for errors?
+- [ ] **Did I confirm that loading states resolve?** A page showing "Loading..." forever
+  is BROKEN, not "partially working." Did I wait for actual data to appear?
+- [ ] **Did I check for stuck spinners?** After every navigation, did I verify that
+  spinners disappeared and real content appeared within 10 seconds?
+- [ ] Did I check the console for errors? (Failed fetch calls cause stuck spinners)
 - [ ] Am I scoring based on evidence, or based on "it looks right"?
 - [ ] Would a real user find bugs I'm ignoring?
 - [ ] Am I being generous because the code is "close enough"?
