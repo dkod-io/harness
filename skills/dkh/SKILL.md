@@ -84,35 +84,35 @@ USER PROMPT
                      │
                      ▼
 ┌─────────────────────────────────────────────────────┐
-│  PHASE 2: BUILD (parallel)                          │
-│  N Generator agents dispatched simultaneously       │
+│  PHASES 2+3: BUILD AND LAND (per-wave loop)         │
+│                                                     │
+│  For EACH wave (Wave 1, then Wave 2 if exists):     │
+│                                                     │
+│  BUILD: N generators dispatched simultaneously      │
 │  Each agent:                                        │
 │  • dk_connect (own session, own overlay)            │
 │  • dk_context (understand target symbols)           │
 │  • dk_file_read → dk_file_write (implement)         │
 │  • dk_submit (changeset)                            │
-│  • Report with changeset_id                         │
 │                                                     │
-│  GATE 2 — Required output:                          │
-│  ✓ Every generator reported back                    │
-│  ✓ Every report includes a changeset_id             │
-│  ✓ List of all changeset IDs collected              │
-│  BLOCKED until all generators have submitted.       │
-└────────────────────┬────────────────────────────────┘
-                     │
-                     ▼
-┌─────────────────────────────────────────────────────┐
-│  PHASE 3: LAND                                      │
-│  Orchestrator merges all changesets:                 │
+│  LAND: Orchestrator merges this wave's changesets    │
 │  • dk_verify ALL changesets in PARALLEL              │
 │  • dk_approve each verified changeset               │
-│  • dk_merge each sequentially (only merge is serial)│
-│  • dk_resolve if conflicts (auto-resolve)           │
+│  • dk_merge each sequentially                       │
 │                                                     │
-│  GATE 3 — Required output:                          │
+│  ⚠️  DO NOT dk_push between waves!                  │
+│  ⚠️  DO NOT ask the user what to do next!           │
+│  More waves? → loop back to BUILD next wave         │
+│  All waves done? → proceed to EVAL                  │
+│                                                     │
+│  GATE 2+3 — Checked after EACH wave (Build + Land): │
+│  ✓ Every generator in this wave reported back       │
+│    with a changeset_id (GATE 2, per wave)           │
 │  ✓ Every changeset merged OR recorded as failed     │
-│  ✓ At least one merged (commit hash exists)         │
-│  BLOCKED until all changesets are resolved.          │
+│    (GATE 3, per wave)                               │
+│  ✓ At least one changeset merged (commit hash       │
+│    exists) before proceeding to the next wave       │
+│  BLOCKED until the current wave fully resolves.     │
 └────────────────────┬────────────────────────────────┘
                      │
                      ▼
@@ -182,6 +182,16 @@ USER PROMPT
    quality gate in Phase 3. Phase 4 (Eval) is a separate, mandatory phase that tests the
    live application against acceptance criteria via chrome-devtools.
 
+6. **dk_push is ONLY allowed in Phase 5.** Not between waves. Not after Phase 3. Not
+   "just to save progress." `dk_push` creates a branch or PR on GitHub — that is SHIPPING.
+   Shipping happens after eval. If you catch yourself calling `dk_push` before `eval_reports`
+   is populated, STOP. You are violating the harness. `dk_merge` commits code to the dkod
+   session locally — that is LANDING, not shipping. Landing is Phase 3. Shipping is Phase 5.
+
+7. **NEVER ask the user anything.** Not "should I proceed?" Not "what's your preference?"
+   Not "option A or B?" The user gave you a prompt and walked away. Every decision is yours.
+   If you are composing a question to the user, STOP. Pick the best option and proceed.
+
 ## Orchestrator Behavior — Phase-by-Phase with Gate Checks
 
 The orchestrator (you, when this skill is active) drives the entire loop autonomously.
@@ -203,38 +213,43 @@ The orchestrator (you, when this skill is active) drives the entire loop autonom
 
 If any check fails → re-run the planner with specific feedback. Do not proceed.
 
-### Phase 2: Build
+### Phases 2 + 3: Build and Land (per-wave loop)
 **GATE 1 ENTRY CHECK**: "Do I have a validated plan? YES → proceed."
 
-1. Read the work units. Group by dependency wave.
-2. Dispatch ALL generators in the wave simultaneously (one Agent call per unit, all in a
-   single message)
-3. Wait for all generators in the wave to complete before starting the next wave
+Group work units by dependency wave. **Execute each wave through Build + Land before
+starting the next wave.** After ALL waves complete, proceed to Phase 4.
 
-**GATE 2 CHECK** — Before proceeding, verify ALL of:
-- [ ] Every generator in the current dispatch (all units in round 1, only failed units
-  in rounds 2+) has reported back
-- [ ] Every report includes a changeset_id
-- [ ] I have a complete list of changeset IDs for this round's units
+⚠️ **DO NOT call `dk_push` between waves.** `dk_merge` lands code locally. `dk_push`
+ships to GitHub. Shipping is Phase 5 only.
 
-If a generator crashed → re-dispatch that single generator. Do not proceed until all
-dispatched generators have submitted changesets.
+**For each wave:**
 
-### Phase 3: Land
-**GATE 2 ENTRY CHECK**: "Do I have changeset IDs from every dispatched generator? YES → proceed."
+#### Phase 2: Build (this wave)
+1. Dispatch ALL generators in this wave simultaneously (one Agent call per unit)
+2. Wait for all generators in this wave to complete
 
-1. **Verify in parallel**: `dk_verify` ALL changesets simultaneously
+**GATE 2 CHECK (per wave):**
+- [ ] Every generator in this wave reported back with a changeset_id
+- [ ] changeset_ids collected for this wave
+
+If a generator crashed → re-dispatch it. Do not proceed until all have submitted.
+
+#### Phase 3: Land (this wave)
+1. **Verify in parallel**: `dk_verify` ALL changesets from this wave simultaneously
 2. **Approve all verified**: `dk_approve` each
 3. **Merge sequentially**: `dk_merge` each in dependency order
 4. Handle conflicts: `dk_resolve` → retry
 
-**GATE 3 CHECK** — Before proceeding, verify ALL of:
-- [ ] Every changeset is either merged OR explicitly recorded as failed with reason
-- [ ] At least one changeset merged successfully (commit hash exists)
-- [ ] Merge/verification failures are recorded for the eval phase
+**GATE 3 CHECK (per wave):**
+- [ ] Every changeset merged OR recorded as failed with reason
+- [ ] At least one changeset merged (commit hash exists)
 
-Partial merge failures are tolerable — the evaluator will catch missing functionality
-from unmerged units. But if zero changesets merged, that's a hard block — re-dispatch.
+⚠️ **After landing this wave: DO NOT dk_push. DO NOT ask the user.**
+More waves remain → loop back to Build for the next wave.
+All waves complete → proceed to Phase 4 (Eval).
+
+Partial merge failures are tolerable — the evaluator will catch missing functionality.
+Zero merges **in this wave** is a hard block — re-dispatch this wave's generators before advancing.
 
 ### Phase 4: Eval — MANDATORY, NEVER SKIP
 **GATE 3 ENTRY CHECK**: "Did at least one changeset merge? Do I have a commit hash? YES → proceed."
