@@ -186,6 +186,7 @@ list_console_messages()
 |-------------|-------|-----------|
 | Page shows spinner indefinitely ("Loading...") | 3 | **Broken data flow** — API call fails or returns wrong format. User sees nothing useful. |
 | Page shows spinner then error message | 4 | At least the error is handled, but feature is non-functional |
+| Page shows spinner, then data after 5-10 seconds | 5 | Works but unacceptably slow load time |
 | Page shows spinner, then data after 2-5 seconds | 7 | Works, acceptable load time |
 | Page shows skeleton, then data under 1 second | 9 | Good UX with loading state |
 | Page shows data instantly (SSR or cached) | 10 | Optimal |

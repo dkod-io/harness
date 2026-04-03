@@ -123,7 +123,7 @@ navigate_page → http://localhost:5173
 take_screenshot → "initial_state.png" (may show spinner)
 wait_for(selector: "[data-loaded], .content, table tbody tr, .list-item, .card",
          timeout: 10000)                    → wait for REAL content
-evaluate_script → "document.querySelectorAll('.spinner, [aria-busy=true]').length"
+evaluate_script → "document.querySelectorAll('.spinner, .loading, [aria-busy=true], .skeleton').length"
                                             → must be 0 (no active spinners)
 take_screenshot → "loaded_state.png" (must show actual data, not spinner)
 
