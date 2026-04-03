@@ -109,59 +109,68 @@ Record the error output as evidence.
 
 Use the chrome-devtools MCP tools to test the live application.
 
-**⚠️ CRITICAL: CHECK THAT ASYNC DATA ACTUALLY LOADS ⚠️**
+**⚠️ CRITICAL: VERIFY THAT PAGES FINISH LOADING ⚠️**
 
-A page that renders a spinner is NOT a working page. After every navigation:
-1. Take an INITIAL screenshot (may show loading state)
-2. Wait for loading indicators to DISAPPEAR (spinners, "Loading..." text, skeleton screens)
-3. Take a FINAL screenshot showing actual content
-4. If loading indicators are still visible after 10 seconds → that is a FAIL
+A page that renders a spinner is NOT a working page. You must confirm that every page
+reaches its final, data-loaded state — not just that it renders an initial shell.
 
-```
-# CORRECT pattern — checks that data loads:
-navigate_page → http://localhost:5173
-take_screenshot → "initial_state.png" (may show spinner)
-wait_for(selector: "[data-loaded], .content, table tbody tr, .list-item, .card",
-         timeout: 10000)                    → wait for REAL content
-evaluate_script → "document.querySelectorAll('.spinner, .loading, [aria-busy=true], .skeleton').length"
-                                            → must be 0 (no active spinners)
-take_screenshot → "loaded_state.png" (must show actual data, not spinner)
+**After EVERY navigation, follow this 3-step check:**
 
-# WRONG pattern — scores spinner as PASS:
-navigate_page → http://localhost:5173
-wait_for(selector: "body")                  → body always exists instantly
-take_screenshot → sees spinner, calls it "loaded"  ← THIS IS THE BUG
-```
+1. **Screenshot the initial state** — this captures whatever the page shows first
+   (may be a loading spinner, skeleton, or instant content).
 
-**For EVERY page you test, you MUST verify:**
-- [ ] Loading spinners/skeletons eventually disappear (within 10 seconds)
-- [ ] Actual content appears (list items, cards, text, data)
-- [ ] If content never appears → check console for errors, check network requests
-- [ ] A page stuck on "Loading..." forever is scored 3/10 maximum (broken data flow)
+2. **Detect and wait for loading to complete** — use `evaluate_script` to inspect the
+   page for active loading indicators. You don't know what selectors the app uses, so
+   probe dynamically:
 
-**Navigation and Visual Testing:**
-```
-navigate_page → http://localhost:5173 (or detected port)
-take_screenshot → capture initial state (may show loading)
-wait_for → wait for actual content (not just body/container)
-take_screenshot → capture loaded state (must show real data)
-evaluate_script → verify no spinners remain
-list_console_messages → check for fetch errors, unhandled rejections
-```
+   ```
+   evaluate_script(expression: `
+     (() => {
+       // Detect common loading patterns — adapt to what you find on the page
+       const indicators = [
+         ...document.querySelectorAll('[aria-busy="true"]'),
+         ...document.querySelectorAll('[class*="spinner"], [class*="loading"], [class*="skeleton"]'),
+         ...[...document.querySelectorAll('*')].filter(el =>
+           el.children.length === 0 &&
+           /^(loading|please wait)/i.test(el.textContent.trim())
+         )
+       ];
+       return {
+         isLoading: indicators.length > 0,
+         indicators: indicators.map(el => ({
+           tag: el.tagName,
+           class: el.className,
+           text: el.textContent.trim().slice(0, 50)
+         }))
+       };
+     })()
+   `)
+   ```
 
-**For each UI criterion:**
+   If `isLoading` is true, wait 10 seconds and check again. If still loading after 10s,
+   the page is stuck — that's a failure.
+
+3. **Screenshot the final state** — this must show actual content, not a loading indicator.
+   Compare with the initial screenshot. If they look the same and both show a spinner,
+   the page never loaded.
+
+**For each UI criterion, follow this pattern:**
 1. `navigate_page` to the relevant page/route
-2. `take_screenshot` — capture the state BEFORE loading completes
-3. `wait_for` — wait for actual content (NOT just a container element). Use selectors
-   that target real data: list items, table rows, cards with text content.
-4. `evaluate_script` — verify no loading indicators remain:
-   `document.querySelectorAll('.spinner, .loading, [aria-busy=true]').length === 0`
-5. `take_screenshot` — capture the state AFTER data loads (this is your evidence)
-6. `click`, `fill`, `type_text`, `press_key` — perform the interaction
-7. `wait_for` — wait for the expected result
-8. `take_screenshot` — capture the state AFTER interaction
-9. `evaluate_script` — check DOM state, data attributes, computed styles
-10. `list_console_messages` — check for JavaScript errors, failed fetch calls
+2. `take_screenshot` — initial state
+3. `evaluate_script` — detect loading indicators (as above). If found, wait up to 10
+   seconds for them to clear. If they don't clear → FAIL (score ≤ 3)
+4. `take_screenshot` — final loaded state (your evidence for scoring)
+5. `list_console_messages` — check for errors (failed fetches cause stuck spinners)
+6. `click`, `fill`, `type_text`, `press_key` — perform interactions
+7. `wait_for` — wait for the expected result of the interaction
+8. `take_screenshot` — post-interaction state
+9. `evaluate_script` — verify expected DOM changes
+
+**Scoring stuck loading states:**
+- Page stuck on a spinner/loading text forever → **3/10 max** (broken data flow)
+- Page loads but takes 5-10 seconds → **5/10** (functional but unacceptably slow)
+- Page loads in 2-5 seconds → **7/10** (acceptable)
+- Page loads under 1 second → **9-10/10** (good to optimal)
 
 **For API criteria:**
 ```

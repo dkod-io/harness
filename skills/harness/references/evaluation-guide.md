@@ -18,28 +18,42 @@ the honest signal. Default to FAIL. Require proof of PASS.
 
 ## Chrome DevTools MCP Patterns
 
-### Basic Page Testing — WITH ASYNC DATA CHECK
+### Basic Page Testing — Verify Loading Completes
 
-**DO NOT** `wait_for(selector: "body")` — `body` always exists instantly. You must wait
-for ACTUAL CONTENT to load. A page stuck on a spinner is BROKEN, not loaded.
+**DO NOT** `wait_for(selector: "body")` — `body` always exists instantly. You must confirm
+the page finishes loading. A page stuck on a spinner is BROKEN, not loaded.
 
 ```
-1. navigate_page(url: "http://localhost:5173")
+1. navigate_page(url: "http://localhost:<port>")
 2. take_screenshot()                              → evidence: initial state (may show loading)
-3. wait_for(selector: ".content, [data-loaded], .list-item, .card, table tbody tr",
-            timeout: 10000)                       → wait for REAL content, not just a shell
-4. evaluate_script(expression:
-     "document.querySelectorAll('.spinner, .loading, [aria-busy=true], .skeleton').length"
-   )                                              → must be 0 (no active loading indicators)
-5. take_screenshot()                              → evidence: page fully loaded with data
-6. list_console_messages()                        → evidence: no fetch errors, no unhandled rejections
+3. evaluate_script(expression: `
+     (() => {
+       const indicators = [
+         ...document.querySelectorAll('[aria-busy="true"]'),
+         ...document.querySelectorAll('[class*="spinner"], [class*="loading"], [class*="skeleton"]'),
+         ...[...document.querySelectorAll('*')].filter(el =>
+           el.children.length === 0 &&
+           /^(loading|please wait)/i.test(el.textContent.trim())
+         )
+       ];
+       return { isLoading: indicators.length > 0, count: indicators.length };
+     })()
+   `)                                             → detect if page is still loading
+4. // If isLoading is true: wait 10 seconds, then re-run step 3
+   // If still loading after 10s → FAIL (score 3/10 max)
+5. take_screenshot()                              → evidence: page in final state (must show data)
+6. list_console_messages()                        → evidence: no fetch errors
 ```
 
-**If step 3 times out** (no content after 10s):
+This pattern is generic — it probes the DOM dynamically for common loading indicators
+instead of relying on project-specific selectors. The evaluator adapts to whatever loading
+patterns the generators implemented.
+
+**If step 4 times out** (still loading after 10s):
 - The page has a broken data flow → FAIL (score 3/10 max)
 - Check console for: failed fetch calls, CORS errors, 404/500 API responses
 - Check network requests for: hanging requests, wrong URLs, missing auth headers
-- Include the stuck-spinner screenshot as evidence of the failure
+- Include both screenshots (initial + still-loading) as evidence
 
 ### Form Interaction
 
