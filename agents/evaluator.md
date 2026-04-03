@@ -228,14 +228,21 @@ visible effect. If it doesn't, that's a failure.
    evaluate_script(expression: `
      (() => {
        const interactive = [
-         ...document.querySelectorAll('button, [role="button"], a[href], input, select, textarea'),
-         ...document.querySelectorAll('[onclick], [tabindex="0"], .clickable, [class*="btn"]')
+         ...new Set([
+           ...document.querySelectorAll('button, [role="button"], a[href], input, select, textarea'),
+           ...document.querySelectorAll('[onclick], [tabindex="0"], .clickable, [class*="btn"]')
+         ])
        ];
        return interactive
          .filter(el => {
            const style = window.getComputedStyle(el);
-           return style.display !== 'none' && style.visibility !== 'hidden' &&
+           const isVisible = style.display !== 'none' && style.visibility !== 'hidden' &&
                   style.opacity !== '0' && el.offsetParent !== null;
+           // Exclude external, mailto, and tel links
+           const isInternalLink = !el.href ||
+             el.href.startsWith(window.location.origin) ||
+             el.href.startsWith('#');
+           return isVisible && (el.tagName !== 'A' || isInternalLink);
          })
          .map(el => ({
            tag: el.tagName,
@@ -253,7 +260,7 @@ visible effect. If it doesn't, that's a failure.
 2. **For each visible, non-disabled interactive element**, test it:
    - `take_screenshot` — state BEFORE clicking
    - `click` the element
-   - Wait 2 seconds for any effect (navigation, modal, state change, animation)
+   - Wait 5 seconds for any effect (navigation, modal, state change, animation)
    - `take_screenshot` — state AFTER clicking
    - `evaluate_script` — compare: did the URL change? Did a modal open? Did content
      change? Did any DOM element get added/removed/modified?
@@ -267,7 +274,8 @@ visible effect. If it doesn't, that's a failure.
          title: document.title,
          modalCount: document.querySelectorAll('[role="dialog"], .modal, [class*="modal"], [class*="overlay"]').length,
          alertCount: document.querySelectorAll('[role="alert"], .alert, .toast, [class*="notification"]').length,
-         bodyText: document.body.innerText.slice(0, 500)
+         bodyText: document.body.innerText,
+         bodyTextLength: document.body.innerText.length
        };
      })()
    `)
