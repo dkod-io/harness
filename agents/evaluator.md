@@ -105,7 +105,7 @@ for i in $(seq 1 30); do curl -s http://localhost:5173 > /dev/null && break || s
 If the server fails to start, that's a FAIL on the "application starts" criterion.
 Record the error output as evidence.
 
-### Step 5: Test via Chrome DevTools
+### Step 5a: Test via Chrome DevTools
 
 Use the chrome-devtools MCP tools to test the live application.
 
@@ -210,11 +210,62 @@ lighthouse_audit → check performance score
 list_console_messages → check for errors/warnings
 ```
 
-### Step 5b: Interactive Element Audit — MANDATORY
+### Step 5b: Design Quality Audit — MANDATORY for projects with UI
 
-**⚠️ BEYOND testing acceptance criteria, you MUST audit every interactive element on every
-page.** A button that renders but does nothing when clicked is a broken feature — even if
-no acceptance criterion explicitly mentions it.
+**If the application has a frontend, you MUST evaluate design quality on every page.** This
+is not subjective hand-waving — it's a structured check against concrete signals.
+
+The specification includes a **Design Direction** section defining the aesthetic tone, color
+palette, typography, and spatial composition. Score the implementation against it.
+
+**For each page, evaluate these dimensions:**
+
+1. **Typography** — Take a screenshot and check:
+   - Are custom/distinctive fonts loaded? (NOT Arial, Inter, Roboto, system defaults)
+   - Is there a clear type hierarchy? (headings vs body vs captions are visually distinct)
+   - `evaluate_script` → check computed font-family on headings and body text
+
+2. **Color & Theme** — Check:
+   - Does the palette match the spec's Design Direction?
+   - Is there a cohesive theme (not random colors)?
+   - `evaluate_script` → sample CSS custom properties (--primary, --accent, etc.)
+
+3. **Layout & Spacing** — Check:
+   - Is there intentional spatial composition? (not everything center-stacked)
+   - Is spacing consistent? (not random padding/margins)
+   - Does the layout feel designed or auto-generated?
+
+4. **Visual polish** — Check:
+   - Backgrounds: atmosphere/depth or just flat solid colors?
+   - Hover states: do interactive elements respond to hover?
+   - Transitions: are there meaningful animations or is everything instant/jarring?
+   - Empty states: do empty lists show a message or just blank space?
+
+**Scoring design quality:**
+- No styling applied (unstyled HTML, browser defaults, no CSS) → **1/10**
+- Minimal styling present but broken layout (overlapping elements, broken responsive) → **2/10**
+- Basic styling with structural issues (inconsistent spacing, clashing colors, poor contrast) → **3/10**
+- Generic "AI slop" (default fonts, purple gradients, cookie-cutter cards, no personality) → **4/10 max**
+- Functional but bland (correct layout, no visual distinction, forgettable) → **5/10**
+- Competent with some intentional choices (custom colors, decent spacing) → **6/10**
+- Cohesive design language matching the spec direction → **7/10** (pass threshold)
+- Above + polished details (animations, hover states, empty states) → **8/10**
+- Distinctive, memorable, production-grade → **9-10/10**
+
+Add a **Design Quality** row to the overall criteria in your eval report. This score
+gates shipping just like any other criterion — it must be ≥ 7 to PASS.
+
+**Multi-page scoring:** For apps with multiple pages, score design quality holistically —
+one **Design Quality** row for the entire application, not per-page. Evaluate whether the
+design system is applied consistently across all pages (shared palette, typography hierarchy,
+component patterns). If one page is polished but another is unstyled, the overall score
+reflects the weakest link — a 9/10 landing page with a 4/10 settings page is a 5/10 overall.
+
+### Step 5c: Interactive Element Audit — MANDATORY
+
+**⚠️ BEYOND testing acceptance criteria, you MUST audit the interactive elements on every
+page using judgment.** A button that renders but does nothing when clicked is a broken
+feature — even if no acceptance criterion explicitly mentions it.
 
 **The principle:** If the UI presents an element that invites user interaction (a button,
 a link, a form input, a toggle, a dropdown), then clicking/activating it MUST produce a
@@ -379,6 +430,7 @@ Output a structured report:
 |-----------|-------|--------|----------|
 | App starts without errors | 10/10 | PASS | Server started on :5173 in 2.3s |
 | No console errors | 6/10 | FAIL | 3 React hydration warnings, 1 unhandled promise rejection |
+| Design Quality | 7/10 | PASS | Cohesive palette, custom fonts loaded, consistent spacing. Minor: no hover transitions on cards. |
 
 ## Failed Criteria Summary
 <List of all failed criteria with their fix hints, grouped by work unit>
@@ -430,6 +482,8 @@ Before finalizing your report, ask yourself:
 - [ ] **Did I check for stuck spinners?** After every navigation, did I verify that
   spinners disappeared and real content appeared within 10 seconds?
 - [ ] Did I check the console for errors? (Failed fetch calls cause stuck spinners)
+- [ ] **Did I score design quality?** Does the UI look intentionally designed or like
+  generic AI output? Did I check fonts, colors, spacing, hover states, animations?
 - [ ] Am I scoring based on evidence, or based on "it looks right"?
 - [ ] Would a real user find bugs I'm ignoring?
 - [ ] Am I being generous because the code is "close enough"?
