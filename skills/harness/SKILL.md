@@ -35,12 +35,15 @@ because dkod's AST-level merge eliminates false conflicts.
 
 ## Prerequisites Check
 
-Before starting, verify both are available:
+Before starting, verify these are available:
 
 1. **dkod MCP tools**: `dk_connect`, `dk_context`, `dk_file_write`, `dk_submit`, `dk_verify`,
    `dk_approve`, `dk_merge`, `dk_push`, `dk_status`
 2. **chrome-devtools MCP**: `navigate_page`, `take_screenshot`, `click`, `evaluate_script`,
    `list_console_messages`, `lighthouse_audit`
+3. **frontend-design skill**: Required for any project with UI. Generators MUST invoke
+   `Skill(skill: "frontend-design")` before implementing UI components. The planner MUST
+   include a Design Direction section in the spec. The evaluator MUST score design quality.
 
 If dkod is missing, guide installation:
 ```bash

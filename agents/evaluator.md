@@ -210,7 +210,49 @@ lighthouse_audit → check performance score
 list_console_messages → check for errors/warnings
 ```
 
-### Step 5b: Interactive Element Audit — MANDATORY
+### Step 5b: Design Quality Audit — MANDATORY for projects with UI
+
+**If the application has a frontend, you MUST evaluate design quality on every page.** This
+is not subjective hand-waving — it's a structured check against concrete signals.
+
+The specification includes a **Design Direction** section defining the aesthetic tone, color
+palette, typography, and spatial composition. Score the implementation against it.
+
+**For each page, evaluate these dimensions:**
+
+1. **Typography** — Take a screenshot and check:
+   - Are custom/distinctive fonts loaded? (NOT Arial, Inter, Roboto, system defaults)
+   - Is there a clear type hierarchy? (headings vs body vs captions are visually distinct)
+   - `evaluate_script` → check computed font-family on headings and body text
+
+2. **Color & Theme** — Check:
+   - Does the palette match the spec's Design Direction?
+   - Is there a cohesive theme (not random colors)?
+   - `evaluate_script` → sample CSS custom properties (--primary, --accent, etc.)
+
+3. **Layout & Spacing** — Check:
+   - Is there intentional spatial composition? (not everything center-stacked)
+   - Is spacing consistent? (not random padding/margins)
+   - Does the layout feel designed or auto-generated?
+
+4. **Visual polish** — Check:
+   - Backgrounds: atmosphere/depth or just flat solid colors?
+   - Hover states: do interactive elements respond to hover?
+   - Transitions: are there meaningful animations or is everything instant/jarring?
+   - Empty states: do empty lists show a message or just blank space?
+
+**Scoring design quality:**
+- Generic "AI slop" (default fonts, purple gradients, cookie-cutter cards, no personality) → **4/10 max**
+- Functional but bland (correct layout, no visual distinction, forgettable) → **5/10**
+- Competent with some intentional choices (custom colors, decent spacing) → **6/10**
+- Cohesive design language matching the spec direction → **7/10** (pass threshold)
+- Above + polished details (animations, hover states, empty states) → **8/10**
+- Distinctive, memorable, production-grade → **9-10/10**
+
+Add a **Design Quality** row to the overall criteria in your eval report. This score
+gates shipping just like any other criterion — it must be ≥ 7 to PASS.
+
+### Step 5c: Interactive Element Audit — MANDATORY
 
 **⚠️ BEYOND testing acceptance criteria, you MUST audit every interactive element on every
 page.** A button that renders but does nothing when clicked is a broken feature — even if
@@ -430,6 +472,8 @@ Before finalizing your report, ask yourself:
 - [ ] **Did I check for stuck spinners?** After every navigation, did I verify that
   spinners disappeared and real content appeared within 10 seconds?
 - [ ] Did I check the console for errors? (Failed fetch calls cause stuck spinners)
+- [ ] **Did I score design quality?** Does the UI look intentionally designed or like
+  generic AI output? Did I check fonts, colors, spacing, hover states, animations?
 - [ ] Am I scoring based on evidence, or based on "it looks right"?
 - [ ] Would a real user find bugs I'm ignoring?
 - [ ] Am I being generous because the code is "close enough"?

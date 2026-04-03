@@ -92,6 +92,23 @@ Produce a specification that covers:
 - **Testing**: <test frameworks>
 - **Build**: <bundler, package manager>
 
+## Design Direction — MANDATORY for any project with UI
+<This section is required. The frontend-design skill will be invoked by every
+generator that builds UI components. You must define the creative direction here
+so all generators produce a cohesive visual result.>
+
+- **Tone/aesthetic**: <Pick a BOLD direction: brutally minimal, maximalist, retro-futuristic,
+  organic/natural, luxury/refined, playful, editorial/magazine, brutalist, art deco,
+  industrial, etc. Be specific — "modern and clean" is not a direction.>
+- **Color palette**: <Primary, secondary, accent colors with hex values. Commit to a
+  palette. Dominant colors with sharp accents outperform timid, evenly-distributed palettes.>
+- **Typography**: <Specific font choices — display font + body font. NEVER use generic
+  fonts like Arial, Inter, Roboto, or system defaults. Choose distinctive, characterful fonts.>
+- **Spatial composition**: <Layout approach — asymmetric? grid-breaking? generous whitespace?
+  controlled density?>
+- **Motion/animation**: <Page transitions, hover effects, loading animations, micro-interactions>
+- **Differentiator**: <What makes this UI unforgettable? The one visual element someone remembers.>
+
 ## Features
 ### Feature 1: <name>
 <Description, user-facing behavior, key interactions>
