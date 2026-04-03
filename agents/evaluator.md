@@ -240,9 +240,10 @@ visible effect. If it doesn't, that's a failure.
            const isInternalLink = !el.href ||
              el.href.startsWith(window.location.origin) ||
              el.href.startsWith('#');
-           // Exclude data-entry inputs (text, email, password, etc.) — clicking
-           // these only focuses the field, producing no detectable state change
-           const dataEntryTypes = ['text','email','password','number','search','tel','url'];
+           // Exclude non-actionable input types — clicking these either only
+           // focuses the field, opens a native picker, or toggles invisible state
+           const dataEntryTypes = ['text','email','password','number','search','tel','url',
+             'checkbox','radio','range','color','file','date','datetime-local','month','week','time','hidden'];
            const isDataEntry = (el.tagName === 'TEXTAREA') ||
              (el.tagName === 'SELECT') ||
              (el.tagName === 'INPUT' && dataEntryTypes.includes(el.type));
@@ -299,7 +300,7 @@ visible effect. If it doesn't, that's a failure.
 - **Always test**: Buttons with text (they are explicit affordances — the user expects them to work)
 - **Always test**: Navigation links
 - **Always test**: Form submit buttons
-- **Skip**: Decorative elements, disabled buttons (they're intentionally inert), external links, data-entry inputs (text fields, textareas, selects — clicking only focuses them)
+- **Skip**: Decorative elements, disabled buttons (they're intentionally inert), external links, non-actionable inputs (text fields, textareas, selects, checkboxes, radios, file inputs, date/color pickers — clicking these only focuses, toggles invisible state, or opens a native OS dialog)
 - **Sample test**: If there are 20 identical list-item buttons, test 2-3 representative ones
 
 **Why this matters:** Generators often create UI that LOOKS complete — all the buttons render
