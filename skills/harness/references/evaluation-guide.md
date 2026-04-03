@@ -18,14 +18,28 @@ the honest signal. Default to FAIL. Require proof of PASS.
 
 ## Chrome DevTools MCP Patterns
 
-### Basic Page Testing
+### Basic Page Testing — WITH ASYNC DATA CHECK
+
+**DO NOT** `wait_for(selector: "body")` — `body` always exists instantly. You must wait
+for ACTUAL CONTENT to load. A page stuck on a spinner is BROKEN, not loaded.
 
 ```
 1. navigate_page(url: "http://localhost:5173")
-2. wait_for(selector: "body", timeout: 10000)
-3. take_screenshot()                              → evidence: page loads
-4. list_console_messages()                        → evidence: no errors
+2. take_screenshot()                              → evidence: initial state (may show loading)
+3. wait_for(selector: ".content, [data-loaded], .list-item, .card, table tbody tr",
+            timeout: 10000)                       → wait for REAL content, not just a shell
+4. evaluate_script(expression:
+     "document.querySelectorAll('.spinner, .loading, [aria-busy=true], .skeleton').length"
+   )                                              → must be 0 (no active loading indicators)
+5. take_screenshot()                              → evidence: page fully loaded with data
+6. list_console_messages()                        → evidence: no fetch errors, no unhandled rejections
 ```
+
+**If step 3 times out** (no content after 10s):
+- The page has a broken data flow → FAIL (score 3/10 max)
+- Check console for: failed fetch calls, CORS errors, 404/500 API responses
+- Check network requests for: hanging requests, wrong URLs, missing auth headers
+- Include the stuck-spinner screenshot as evidence of the failure
 
 ### Form Interaction
 
@@ -162,6 +176,22 @@ list_console_messages()
 | All specified filters work | 7 | **Pass threshold** |
 | Filters + URL state preservation | 8 | Good engineering |
 | Above + keyboard shortcuts + clear all | 9 | Polished |
+
+### Example: "Page with async data loading"
+
+**This is the most commonly missed failure.** A page that renders a spinner forever looks
+"partially working" but is completely broken from the user's perspective.
+
+| What you see | Score | Reasoning |
+|-------------|-------|-----------|
+| Page shows spinner indefinitely ("Loading...") | 3 | **Broken data flow** — API call fails or returns wrong format. User sees nothing useful. |
+| Page shows spinner then error message | 4 | At least the error is handled, but feature is non-functional |
+| Page shows spinner, then data after 2-5 seconds | 7 | Works, acceptable load time |
+| Page shows skeleton, then data under 1 second | 9 | Good UX with loading state |
+| Page shows data instantly (SSR or cached) | 10 | Optimal |
+
+**KEY: A spinner that never resolves is NOT a 5 or 6. It is a 3.** The user gets zero value.
+The feature is broken. Don't be generous because "the UI shell looks nice."
 
 ## Fallback: Testing Without Chrome DevTools
 
