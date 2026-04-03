@@ -252,6 +252,12 @@ palette, typography, and spatial composition. Score the implementation against i
 Add a **Design Quality** row to the overall criteria in your eval report. This score
 gates shipping just like any other criterion — it must be ≥ 7 to PASS.
 
+**Multi-page scoring:** For apps with multiple pages, score design quality holistically —
+one **Design Quality** row for the entire application, not per-page. Evaluate whether the
+design system is applied consistently across all pages (shared palette, typography hierarchy,
+component patterns). If one page is polished but another is unstyled, the overall score
+reflects the weakest link — a 9/10 landing page with a 4/10 settings page is a 5/10 overall.
+
 ### Step 5c: Interactive Element Audit — MANDATORY
 
 **⚠️ BEYOND testing acceptance criteria, you MUST audit the interactive elements on every
