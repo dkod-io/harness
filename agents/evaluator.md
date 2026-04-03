@@ -127,9 +127,14 @@ reaches its final, data-loaded state — not just that it renders an initial she
    evaluate_script(expression: `
      (() => {
        // Detect common loading patterns — adapt to what you find on the page
+       const isActiveLoadingClass = (cls) =>
+         /(^|[\s-])(spinner|loading|skeleton)([\s-]|$)/i.test(cls) &&
+         !/(complete|done|finished|hidden|loaded)/i.test(cls);
        const indicators = [
          ...document.querySelectorAll('[aria-busy="true"]'),
-         ...document.querySelectorAll('[class*="spinner"], [class*="loading"], [class*="skeleton"]'),
+         ...[...document.querySelectorAll('[class]')].filter(el =>
+           isActiveLoadingClass(el.className)
+         ),
          ...[...document.querySelectorAll('*')].filter(el =>
            el.children.length === 0 &&
            /^(loading|please wait)/i.test(el.textContent.trim())

@@ -28,15 +28,27 @@ the page finishes loading. A page stuck on a spinner is BROKEN, not loaded.
 2. take_screenshot()                              → evidence: initial state (may show loading)
 3. evaluate_script(expression: `
      (() => {
+       const isActiveLoadingClass = (cls) =>
+         /(^|[\s-])(spinner|loading|skeleton)([\s-]|$)/i.test(cls) &&
+         !/(complete|done|finished|hidden|loaded)/i.test(cls);
        const indicators = [
          ...document.querySelectorAll('[aria-busy="true"]'),
-         ...document.querySelectorAll('[class*="spinner"], [class*="loading"], [class*="skeleton"]'),
+         ...[...document.querySelectorAll('[class]')].filter(el =>
+           isActiveLoadingClass(el.className)
+         ),
          ...[...document.querySelectorAll('*')].filter(el =>
            el.children.length === 0 &&
            /^(loading|please wait)/i.test(el.textContent.trim())
          )
        ];
-       return { isLoading: indicators.length > 0, count: indicators.length };
+       return {
+         isLoading: indicators.length > 0,
+         indicators: indicators.map(el => ({
+           tag: el.tagName,
+           class: el.className,
+           text: el.textContent.trim().slice(0, 50)
+         }))
+       };
      })()
    `)                                             → detect if page is still loading
 4. // If isLoading is true: wait 10 seconds, then re-run step 3
