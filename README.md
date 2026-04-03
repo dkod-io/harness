@@ -105,7 +105,7 @@ That's it. The harness does the rest.
 
 ```
 harness/
-├── skills/harness/
+├── skills/dkh/
 │   ├── SKILL.md                    # Core harness behavior and autonomous loop
 │   └── references/
 │       ├── planning-guide.md       # Symbol-level decomposition patterns
@@ -117,7 +117,6 @@ harness/
 │   ├── generator.md                # Implements one work unit per dkod session
 │   └── evaluator.md                # Adversarial testing via chrome-devtools
 ├── commands/
-│   ├── dkh.md                      # /dkh — full pipeline
 │   ├── plan.md                     # /dkh:plan — planning only
 │   ├── eval.md                     # /dkh:eval — evaluation only
 │   └── status.md                   # /dkh:status — progress check

@@ -1,5 +1,5 @@
 ---
-name: harness
+name: dkh
 description: >
   Autonomous harness for building complete applications from a single prompt. Uses dkod for
   parallel agent execution with AST-level semantic merging. Orchestrates a Planner that decomposes
