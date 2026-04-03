@@ -94,7 +94,9 @@ Before proceeding, verify:
 **If gate fails** → re-run planner with specific feedback, up to **3 attempts**. If Gate 1
 fails 3 times, halt with an error report explaining which checks failed and why the prompt
 may require manual decomposition. Do NOT proceed.
-**If gate passes** → set `plan = <the plan>`, set `active_units = plan.work_units`. Proceed to Phase 2.
+**If gate passes** → set `plan = <the plan>`, set `active_units = plan.work_units`,
+  set `waves = group_by_wave(active_units)` (ordered list of waves from the dependency graph),
+  set `current_wave = 0`. Proceed to Phase 2.
 
 ---
 
@@ -165,7 +167,7 @@ But if ZERO changesets merged in this wave, that's a hard block.
 **If some merged** → update `merged_commit = <hash>`, record `merge_failures`.
 
 ⚠️ **After landing this wave: DO NOT dk_push. DO NOT ask the user what to do next.**
-If more waves remain → loop back to Phase 2 for the next wave.
+If more waves remain → set `current_wave += 1`, then loop back to Phase 2 for the next wave.
 If all waves are complete → proceed to Phase 4 (Eval).
 
 ---

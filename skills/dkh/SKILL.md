@@ -249,7 +249,7 @@ More waves remain → loop back to Build for the next wave.
 All waves complete → proceed to Phase 4 (Eval).
 
 Partial merge failures are tolerable — the evaluator will catch missing functionality.
-Zero merges across all waves is a hard block — re-dispatch.
+Zero merges **in this wave** is a hard block — re-dispatch this wave's generators before advancing.
 
 ### Phase 4: Eval — MANDATORY, NEVER SKIP
 **GATE 3 ENTRY CHECK**: "Did at least one changeset merge? Do I have a commit hash? YES → proceed."
