@@ -23,13 +23,13 @@ If empty, the evaluator will:
 3. Spawn the evaluator agent with `model:` from the active profile's Evaluator row:
    - Current codebase state
    - Acceptance criteria (from arguments, plan files, or inferred)
-3. The evaluator:
+4. The evaluator:
    - Starts the dev server
    - Tests via chrome-devtools
    - Runs dk_verify
    - Scores each criterion
    - Kills background processes
-4. Display the evaluation report
+5. Display the evaluation report
 
 ## Output
 

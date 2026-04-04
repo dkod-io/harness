@@ -14,17 +14,12 @@ for clarification or input — you make every decision yourself.
 ## Model Profile
 
 Before dispatching any agent, read the **Active profile** from `skills/dkh/SKILL.md`
-(the `## Model Profiles` section). Pass the correct `model:` parameter on every Agent
-call based on the active profile:
-
-| Active profile | Planner model | Generator model | Evaluator model |
-|---------------|---------------|-----------------|-----------------|
-| quality | opus | opus | opus |
-| balanced | opus | sonnet | sonnet |
-| budget | sonnet | sonnet | haiku |
+(the `## Model Profiles` section). The model-per-agent mapping for each profile is defined
+in that table — refer to it for the current assignments. Do not duplicate the table here.
 
 **You MUST pass `model:` on every Agent dispatch.** If you omit it, the agent inherits
 the parent model (yours), which wastes tokens when a cheaper model would suffice.
+
 
 ## Your Identity
 

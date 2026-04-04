@@ -67,10 +67,12 @@ profile and passes `model:` on every Agent dispatch call.
 
 | Agent | quality | balanced | budget |
 |-------|---------|----------|--------|
-| **Orchestrator** | opus | opus | sonnet |
+| **Orchestrator**\* | opus | opus | sonnet |
 | **Planner** | opus | opus | sonnet |
 | **Generator** | opus | sonnet | sonnet |
 | **Evaluator** | opus | sonnet | haiku |
+
+\* The orchestrator model is set by the invoking Claude Code session, not by this table. This row is a recommendation for the session model, not enforced by the harness.
 
 - **quality** — All Opus. Maximum capability. Use for complex or high-stakes builds.
 - **balanced** (default) — Opus for planning and orchestration, Sonnet for implementation
