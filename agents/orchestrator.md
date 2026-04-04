@@ -246,7 +246,18 @@ Before proceeding, verify:
 **Entry check**: `eval_reports` must be non-empty AND have scores for every criterion.
 If eval_reports is empty → **STOP. YOU SKIPPED PHASE 4. GO BACK.**
 
-Read the evaluator's **verdict** from the eval report:
+**Verdict aggregation:** Multiple evaluators (per-unit + integration) each emit an
+independent verdict. Aggregate them using the **most severe wins** rule:
+
+```
+REPLAN > RETRY > PASS
+```
+
+If ANY evaluator returns REPLAN, the aggregate verdict is REPLAN. If none return REPLAN
+but any return RETRY, the aggregate verdict is RETRY. Only if ALL evaluators return PASS
+is the aggregate verdict PASS. Use the aggregate verdict below.
+
+Read the aggregate **verdict**:
 
 - **PASS** → `dk_push(mode: "pr")`. Include eval summary in PR description. Done.
 
@@ -313,15 +324,22 @@ changeset_ids = []          # wiped
 merged_commit = null        # wiped
 merge_failures = []         # wiped
 eval_reports = []           # wiped
+unit_attempts = {}          # wiped — new plan has new units, old counts are meaningless
+blocked_units = []          # wiped — REPLAN produces new unit IDs; old blocked entries
+                            #         would collide with and silently pre-block new units
 # plan will be replaced by the new plan from the planner
 # replan_count MUST survive — this is the infinite-loop guard
-# unit_attempts MUST survive — prevents re-dispatching units that failed 3+ times
-# blocked_units MUST survive — blocked units stay blocked across replans
 ```
 
 **CRITICAL: `replan_count` must NOT be cleared during a REPLAN reset.** If it is wiped,
 the orchestrator loses memory of prior REPLANs, and the "max 1 REPLAN per build" guard
 can never fire — enabling an infinite REPLAN loop.
+
+**Why clear `blocked_units` and `unit_attempts`?** REPLAN produces a structurally new plan
+with new unit IDs. If old blocked entries survive, their IDs may collide with new units,
+silently pre-blocking brand-new units that have never been tried. Since `replan_count`
+already caps REPLANs at 1, the infinite-loop protection these fields provide is redundant
+across REPLAN boundaries.
 
 ### Subsequent Rounds (2 and 3):
 
