@@ -317,6 +317,8 @@ Dev server is already running from the smoke test.
 - [ ] I have an overall/integration eval report
 - [ ] Every acceptance criterion has a score (no unscored criteria)
 - [ ] Every score has evidence (screenshots, console output, test results)
+- [ ] **At least one screenshot exists in the eval evidence** — if zero screenshots,
+  the evaluator did not actually test the live app. That is a gate failure.
 - [ ] Pass/fail counts are calculated
 
 If an evaluator crashed → re-dispatch that evaluator. Do not proceed without complete reports.

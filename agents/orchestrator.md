@@ -198,7 +198,9 @@ tokens testing a broken app. Fix the build first.
 failure, not an eval failure. DO NOT dispatch evaluators. Instead:
 - Kill the dev server
 - Treat ALL units as failed with feedback: "App crashes on startup: <error details>"
-- Enter a fix round (RETRY) — re-dispatch all generators with the crash error
+- **Execute Round Transition** (see the "Round Transition" block below): increment `round`,
+  wipe `changeset_ids`, `merged_commit`, `merge_failures`, `eval_reports`
+- Re-dispatch all generators with the crash error as feedback
 - After fix round, re-land, re-run smoke test
 
 **If smoke test PASSES** → Record the server URL. Proceed to Phase 4 (Eval).
