@@ -16,8 +16,9 @@ If empty: "Usage: `/dkh:plan <build prompt>` — describe what you want planned.
 ## Execution
 
 1. Verify dkod MCP is available
-2. Spawn the planner agent with the prompt
-3. Display the resulting plan:
+2. Read the **Active profile** from `skills/dkh/SKILL.md` (Model Profiles section)
+3. Spawn the planner agent with the prompt, passing `model:` from the active profile's Planner row
+4. Display the resulting plan:
    - Specification summary
    - Work units with their acceptance criteria
    - Symbol ownership assignments

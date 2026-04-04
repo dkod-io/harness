@@ -4,7 +4,6 @@ description: >
   Adversarial evaluator that tests the merged application via chrome-devtools MCP and dk_verify.
   Skeptical by design — defaults to FAIL unless proven PASS with evidence. Scores each acceptance
   criterion, provides specific actionable feedback, and produces a structured eval report.
-model: opus
 maxTurns: 60
 ---
 
