@@ -246,6 +246,7 @@ The orchestrator (you, when this skill is active) drives the entire loop autonom
 - [ ] Plan contains work units with symbol-level decomposition
 - [ ] Every work unit has acceptance criteria (5+ testable criteria each)
 - [ ] No duplicate symbol ownership across work units
+- [ ] Aggregation symbols identified with single owners (no entry point conflicts)
 - [ ] Overall acceptance criteria exist
 - [ ] **For UI projects**: Spec includes a `## Design Direction` section with a concrete
   aesthetic tone (not "modern and clean"), hex color values, and named font choices

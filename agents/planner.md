@@ -208,8 +208,10 @@ Symbol ownership is the ONLY structural constraint. It prevents true conflicts i
 **Symbol ownership rules:**
 1. **Every symbol has exactly one owner.** No two units may both CREATE or MODIFY the same
    function, component, class, or type. The owner is listed under `OWNS:` in the unit.
-2. **Hub files (App.tsx, router.ts, index.ts, package.json) belong to the scaffolding unit.**
-   Feature units create their own files. The scaffolding unit wires them into the hub.
+2. **Aggregation symbols (App.tsx, run(), main(), router.ts, index.ts, mod.rs) belong to exactly
+   one owner — typically the scaffolding unit.** The owner writes the FINAL version with all
+   wiring pre-included. Other units MUST NOT write to files containing aggregation symbols.
+   See Step 4b.
 3. **If two units need the same type, each defines it locally.** Type duplication is fine —
    it's cheap and keeps units independent.
 4. **Inline/local types are NOT listed in `OWNS:`.** Types inlined within a unit's own files
@@ -230,6 +232,38 @@ Unit 6: OWNS TaskDetail, TaskForm, useTask
 
 Dispatch: [Unit 1, Unit 2, Unit 3, Unit 4, Unit 5, Unit 6] → 6 agents simultaneously
 ```
+
+### Step 4b: Identify Aggregation Symbols
+
+Aggregation symbols are entry points that wire the app together — they import and register
+everything else. Every codebase has them. They MUST have exactly one owner.
+
+**Common aggregation symbols:**
+- `run()` / `main()` — registers commands, plugins, middleware
+- `App` / `App.tsx` — renders top-level layout, imports all pages
+- `index.ts` / `mod.rs` — re-exports from submodules
+- `routes.ts` / `router.ts` — registers all routes
+- `store/index.ts` — combines all store slices
+
+**The owner unit writes the FINAL version with ALL wiring pre-included.** For example, if
+WU-01 (scaffolding) owns `run()`, it writes it with all 15 Tauri commands registered —
+even though WU-02 through WU-08 haven't implemented the handlers yet. The handlers go
+in separate files owned by their respective units.
+
+**Add this section to your plan output:**
+
+```
+## Aggregation Symbols (single-owner)
+
+| Symbol | File | Owner | Wires together |
+|--------|------|-------|---------------|
+| run() | src-tauri/src/lib.rs | WU-01 | All Tauri commands |
+| App | src/App.tsx | WU-05 | All page routes |
+| mod.rs | src/commands/mod.rs | WU-01 | All command modules |
+```
+
+Other units MUST NOT write to files containing aggregation symbols. They write their
+implementations in separate files that the aggregation symbol imports.
 
 ### Step 5: Define Acceptance Criteria
 
@@ -280,6 +314,12 @@ Your output is a single structured artifact:
 
 ### Unit 2: <title>
 ...
+
+## Aggregation Symbols (single-owner)
+
+| Symbol | File | Owner | Wires together |
+|--------|------|-------|---------------|
+| <symbol> | <file> | <owner unit> | <what it imports/registers> |
 
 ## Dispatch
 All units dispatch simultaneously: [Unit 1, Unit 2, Unit 3, Unit 4, Unit 5, Unit 6]

@@ -178,3 +178,39 @@ pattern:
 
 This prevents the "but that's not what I meant" problem. Both sides agree on what "done"
 means before any code is written.
+
+## Aggregation Symbol Pattern
+
+Entry points are the most common source of true conflicts in parallel builds. Every
+generator that adds a feature wants to register it in the entry point — but only one
+generator can own that symbol.
+
+### The Pattern
+
+1. **Identify all aggregation symbols** — functions/components that wire the app together
+2. **Assign each to exactly one unit** (usually scaffolding)
+3. **The owner writes the FINAL version** with all imports pre-included
+4. **Other units write only their implementations** in separate files
+
+### Example: Tauri App
+
+**Wrong (causes 5 conflicts):**
+- WU-01 writes `lib.rs::run()` with its own commands
+- WU-02 writes `lib.rs::run()` to add dkod commands → CONFLICT
+- WU-03 writes `lib.rs::run()` to add repo commands → CONFLICT
+
+**Right (zero conflicts):**
+- WU-01 owns `lib.rs::run()` and writes it with ALL commands registered:
+  `commands::dkod_connect, commands::repo_list, commands::file_open, ...`
+- WU-02 writes `src/commands/dkod.rs` (its own file, no conflict)
+- WU-03 writes `src/commands/repo.rs` (its own file, no conflict)
+
+### Example: React App
+
+**Wrong:**
+- WU-01 writes `App.tsx` with layout shell
+- WU-05 writes `App.tsx` to add routes → CONFLICT
+
+**Right:**
+- WU-01 owns `App.tsx` and writes it with ALL routes pre-imported
+- WU-05 writes `src/pages/Dashboard.tsx` (its own file, no conflict)
