@@ -200,6 +200,9 @@ failure, not an eval failure. DO NOT dispatch evaluators. Instead:
 - Treat ALL units as failed with feedback: "App crashes on startup: <error details>"
 - **Execute Round Transition** (see the "Round Transition" block below): increment `round`,
   wipe `changeset_ids`, `merged_commit`, `merge_failures`, `eval_reports`
+- **Check round cap**: if `round >= 3` after incrementing, do NOT re-dispatch.
+  Instead, `dk_push` with "app fails to start after 3 rounds" documented. This matches
+  the Phase 5 RETRY round-3 behavior.
 - Re-dispatch all generators with the crash error as feedback
 - After fix round, re-land, re-run smoke test
 

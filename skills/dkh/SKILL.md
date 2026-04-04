@@ -207,7 +207,7 @@ USER PROMPT
    that Phase N-1's required output exists:
    - Phase 2 starts: "Do I have a plan with work units and criteria? YES → proceed"
    - Phase 3 starts: "Do I have changeset IDs from all dispatched generators? YES → proceed"
-   - Phase 4 starts: "Did at least one changeset merge? Do I have a commit hash? YES → proceed"
+   - Phase 4 starts: "Did the smoke test pass? Is the dev server running? YES → proceed"
    - Phase 5 starts: "Do I have eval reports for every unit? YES → proceed"
 
 5. **dk_verify is NOT evaluation.** `dk_verify` runs lint/type-check/test. It does NOT start
