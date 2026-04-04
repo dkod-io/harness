@@ -76,6 +76,7 @@ merge_failures: []          # Changesets that failed to merge
 eval_reports: []            # Set after Phase 4 — MUST EXIST before dk_push
 unit_attempts: {}           # { "unit-id": attempt_count } — incremented each re-dispatch
 blocked_units: []           # Units that exceeded MAX_UNIT_ATTEMPTS (3) — not retried
+replan_count: 0             # Number of REPLANs executed this build (max 1)
 ```
 
 ---
@@ -258,12 +259,13 @@ Read the evaluator's **verdict** from the eval report:
 
 - **RETRY, round 3** → `dk_push(mode: "pr")` with issues documented. Report honestly.
 
-- **REPLAN** (max 1 per build) → If this is the first REPLAN:
-  - Re-run the planner with the eval report as context ("The previous plan had structural
-    issues: <eval report summary>. Produce a new plan that addresses these problems.")
-  - Reset: `round = 1`, clear all state except the new plan
-  - Re-enter Phase 1 gate check with the new plan
-  - If this is the second REPLAN → treat as RETRY instead (prevent infinite replanning)
+- **REPLAN** (max 1 per build) → Check `replan_count`:
+  - If `replan_count >= 1` → treat as RETRY instead (prevent infinite replanning)
+  - If `replan_count == 0`:
+    - Re-run the planner with the eval report as context ("The previous plan had structural
+      issues: <eval report summary>. Produce a new plan that addresses these problems.")
+    - Execute REPLAN TRANSITION (see below)
+    - Re-enter Phase 1 gate check with the new plan
 
 **The PR description MUST include:**
 ```markdown
@@ -291,11 +293,35 @@ eval_reports = []           # wiped — new evaluators will repopulate
 # plan remains unchanged
 # unit_attempts remains — carries across rounds (cumulative per unit)
 # blocked_units remains — blocked units are never retried
+# replan_count remains unchanged
 ```
 
 **Do NOT carry stale state.** If `changeset_ids` from round 1 persists into round 2,
 Gate 2 may incorrectly pass. If `eval_reports` from round 1 persists, Gate 4 may
 incorrectly pass. Wipe them.
+
+### REPLAN Transition (before re-entering Phase 1):
+
+When Phase 5 chooses REPLAN (and `replan_count == 0`), reset state for a full re-plan:
+
+```
+# REPLAN TRANSITION — execute this before re-entering Phase 1:
+replan_count += 1           # increment FIRST — survives the reset
+round = 1                   # restart from round 1
+active_units = []           # wiped — new plan will repopulate
+changeset_ids = []          # wiped
+merged_commit = null        # wiped
+merge_failures = []         # wiped
+eval_reports = []           # wiped
+# plan will be replaced by the new plan from the planner
+# replan_count MUST survive — this is the infinite-loop guard
+# unit_attempts MUST survive — prevents re-dispatching units that failed 3+ times
+# blocked_units MUST survive — blocked units stay blocked across replans
+```
+
+**CRITICAL: `replan_count` must NOT be cleared during a REPLAN reset.** If it is wiped,
+the orchestrator loses memory of prior REPLANs, and the "max 1 REPLAN per build" guard
+can never fire — enabling an infinite REPLAN loop.
 
 ### Subsequent Rounds (2 and 3):
 
@@ -390,6 +416,7 @@ eval_reports: []                  # Set after Gate 4 — MUST EXIST before dk_pu
 overall_pass_rate: "X/Y"          # Computed from eval_reports
 unit_attempts: {}                     # Cumulative per-unit attempt count
 blocked_units: []                     # Units blocked after MAX_UNIT_ATTEMPTS (3)
+replan_count: 0                       # Number of REPLANs executed (max 1 — survives resets)
 ```
 
 **Self-check before dk_push** (run this EVERY time before calling dk_push):

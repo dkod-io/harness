@@ -90,9 +90,14 @@ Call `dk_verify` to run the automated pipeline:
 
 Record the results. Any verification failure is an automatic criterion failure.
 
-### Step 4: Start the Application
+### Step 4: Start the Application (conditional)
 
-Use `Bash` to install dependencies and start the dev server:
+**Check your prompt first.** If the orchestrator injected a server URL (e.g., "The dev server
+is already running at http://localhost:5173. Do NOT start another dev server."), then the server
+is already running. **Skip this step entirely** — go straight to Step 5a using the provided URL.
+
+**Only if NO server URL was provided** (e.g., you are running standalone or the orchestrator
+did not start a server), start the dev server yourself:
 
 ```bash
 # Detect the framework and install
@@ -109,6 +114,9 @@ for i in $(seq 1 30); do curl -s http://localhost:5173 > /dev/null && break || s
 
 If the server fails to start, that's a FAIL on the "application starts" criterion.
 Record the error output as evidence.
+
+**Track whether you started the server.** Set `I_STARTED_SERVER = true/false` — you will
+need this in Step 7 to decide whether to kill processes.
 
 ### Step 5a: Test via Chrome DevTools
 
@@ -387,12 +395,17 @@ Be SPECIFIC in your fix hints:
 - **Good**: "In src/api/tasks.ts:createTask(), add Zod schema validation for the request body before inserting into database"
 - **Bad**: "Add validation"
 
-### Step 7: Kill Background Processes
+### Step 7: Kill Background Processes (conditional)
 
-**CRITICAL**: Before producing your final output, kill any background processes you started:
+**Only run this step if `I_STARTED_SERVER == true`** (you started the dev server yourself
+in Step 4). If the orchestrator provided a running server URL, do NOT kill processes here —
+the orchestrator owns the server lifecycle and will shut it down after all evaluators complete.
+Killing the orchestrator's server would break subsequent evaluators in the sequential chain.
+
+**If you started the server yourself:**
 
 ```bash
-# Kill dev servers
+# Kill dev servers — ONLY if this evaluator started them
 pkill -f "npm run dev" 2>/dev/null
 pkill -f "vite" 2>/dev/null
 pkill -f "next" 2>/dev/null
@@ -403,6 +416,9 @@ lsof -ti:3000,5173,8000,8080 | xargs kill -9 2>/dev/null
 ```
 
 If you don't do this, the harness will hang waiting for your process to exit.
+
+**If the orchestrator provided the server:** Skip this step entirely. The server is not yours
+to kill.
 
 ### Step 7b: Determine Verdict
 
