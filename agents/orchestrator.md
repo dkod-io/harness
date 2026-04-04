@@ -218,7 +218,7 @@ Before proceeding, verify:
 If eval_reports is empty → **STOP. YOU SKIPPED PHASE 4. GO BACK.**
 
 Count results:
-- **All criteria PASS** → Set `pushed = true`, then `dk_push(mode: "pr")`. Include eval summary in PR description.
+- **All criteria PASS** → `dk_push(mode: "pr")`. Include eval summary in PR description.
   Done. Report the PR URL.
 
 - **Some FAIL, round < 3** → Execute the Round Transition
@@ -226,7 +226,7 @@ Count results:
   failed units. Each generator gets their evaluator's specific feedback.
   Then proceed through Phase 3 → Phase 4 → Phase 5.
 
-- **Round 3 exhausted** → Set `pushed = true`, then `dk_push(mode: "pr")` with issues documented. Report honestly.
+- **Round 3 exhausted** → `dk_push(mode: "pr")` with issues documented. Report honestly.
 
 **The PR description MUST include:**
 ```markdown
