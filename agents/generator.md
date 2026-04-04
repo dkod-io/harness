@@ -22,8 +22,8 @@ first, then handle edge cases if time permits.
 Even within your own unit, prefer parallel operations over sequential ones:
 - When reading multiple files, batch your `dk_file_read` calls — don't read one, process,
   read another. Read all files you need upfront.
-- When writing multiple files, write them all before doing your self-check — don't interleave
-  write-check-write-check.
+- When writing files, check each `dk_file_write` response for `conflict_warnings` before
+  writing the next file. If a warning appears, stop and adapt immediately (see Step 3).
 - When running multiple Bash commands that are independent, run them in parallel.
 
 You exist because the orchestrator dispatched N generators as a Claude Code agent team in
@@ -69,6 +69,9 @@ For each file in your work unit:
    - **Rewrite your file** to incorporate both your changes and theirs
    - **Re-call `dk_file_write`** with the combined content
    - **Verify** no `conflict_warnings` remain, then continue with remaining files
+   - If warnings persist after your rewrite (rare — means a third agent merged while you
+     were adapting), repeat the cycle up to 2 more times. After 3 attempts, proceed with
+     your best version — the merge handler will catch any remaining conflicts.
 4. dk_file_write handles session isolation — no other generator sees your changes
 
 **Implementation principles:**
