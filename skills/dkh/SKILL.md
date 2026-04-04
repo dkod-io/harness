@@ -114,7 +114,7 @@ USER PROMPT
 │  Each agent:                                        │
 │  • dk_connect (own session, own overlay)            │
 │  • dk_context (understand target symbols)           │
-│  • dk_file_read → dk_file_write (implement)         │
+│  • dk_file_read → dk_file_write (check warnings!)   │
 │  • dk_submit (changeset)                            │
 │                                                     │
 │  GATE 2 — Required output:                          │
