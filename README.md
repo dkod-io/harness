@@ -50,7 +50,7 @@ Traditional parallel agents must carefully avoid touching the same files. With d
 ### The autonomous loop
 
 1. **Plan** — Planner reads the codebase, expands the prompt into a spec, decomposes into parallel work units with testable acceptance criteria
-2. **Build** — N generators dispatched simultaneously, each with its own dkod session
+2. **Build** — ALL generators dispatched simultaneously in a single blast, each with its own dkod session
 3. **Land** — Orchestrator verifies, approves, and merges all changesets (dkod AST merge)
 4. **Eval** — Evaluator starts the app, tests via chrome-devtools, grades every criterion
 5. **Ship or Fix** — All pass? Push PR. Failures? Re-dispatch generators with feedback. Max 3 rounds.

@@ -50,8 +50,8 @@ Call `dk_context` with queries relevant to your work unit:
 
 Call `dk_file_read` for any files you need to understand before modifying them.
 
-If this is a later wave (your dependencies have already merged), read the files that earlier
-generators created — they're now in the base codebase.
+Your dkod session sees the base codebase snapshot at connection time. Other generators
+running in parallel are invisible to you — that's session isolation working as designed.
 
 ### Step 3: Implement
 
@@ -118,7 +118,7 @@ Call `dk_submit` with:
 
 If submit returns a conflict:
 - Read the conflict details carefully
-- The conflict means another generator (in an earlier wave) modified a symbol you also touched
+- The conflict means another generator modified a symbol you also touched
 - This shouldn't happen if the planner decomposed well, but if it does:
   - Read the other agent's version with `dk_file_read` (after the conflict is surfaced)
   - Adjust your code to work alongside theirs

@@ -47,14 +47,11 @@ mode — guard against it explicitly.**
 ```
 round: 1                    # Current round (1, 2, or 3)
 plan: null                  # Set after Phase 1
-waves: []                   # Ordered list of waves from the plan
-current_wave: 0             # Index of wave being built/landed
 active_units: []            # All units in round 1; only failed units in rounds 2+
 changeset_ids: []           # Set after Phase 2 — one per unit in active_units
-merged_commit: null         # Set after Phase 3 — latest commit hash after ALL waves
+merged_commit: null         # Set after Phase 3 — latest commit hash
 merge_failures: []          # Changesets that failed to merge
 eval_reports: []            # Set after Phase 4 — MUST EXIST before dk_push
-pushed: false               # Set ONLY in Phase 5. dk_push is FORBIDDEN before Phase 5.
 ```
 
 ---
@@ -78,45 +75,24 @@ Before proceeding, verify:
 - [ ] Plan has a specification (stack, features, data model)
 - [ ] Plan has work units with symbols + acceptance criteria
 - [ ] Every unit has 5+ testable criteria
-- [ ] Dependency graph with wave assignments exists
 - [ ] Overall acceptance criteria exist
-- [ ] **Maximum 2 waves.** If the plan has 3+ waves, REJECT it. Tell the planner:
-  "Plan rejected: {N} waves detected. Maximum is 2. Move all feature units to Wave 1
-  with depends_on: none. Only an integration unit may be in Wave 2."
-- [ ] **Parallelism score ≥ 0.8, or Wave 2 has exactly 1 integration unit.** At least 80%
-  of units must be in Wave 1, OR Wave 2 contains a single integration unit and Wave 1 has
-  ≥ 3 units. If neither condition holds, REJECT. Tell the planner: "Plan rejected: parallelism
-  score {X}/{Y} = {ratio}. Need ≥ 0.8 (or a single integration unit in Wave 2 with ≥ 3
-  Wave 1 units). Remove unnecessary dependencies."
 - [ ] **No duplicate symbol ownership.** No two units may OWNS the same symbol. If found,
   REJECT. Tell the planner which symbols have multiple owners.
+- [ ] Design direction established for any UI work
 
 **If gate fails** → re-run planner with specific feedback, up to **3 attempts**. If Gate 1
 fails 3 times, halt with an error report explaining which checks failed and why the prompt
 may require manual decomposition. Do NOT proceed.
-**If gate passes** → set `plan = <the plan>`, set `active_units = plan.work_units`,
-  set `waves = group_by_wave(active_units)` (ordered list of waves from the dependency graph),
-  set `current_wave = 0`. Proceed to Phase 2.
+**If gate passes** → set `plan = <the plan>`, set `active_units = plan.work_units`.
+  Proceed to Phase 2.
 
 ---
 
-### PHASES 2 + 3 — BUILD AND LAND (per-wave loop)
+### PHASE 2 — BUILD
 
 **Entry check**: `plan` must be set. If null → STOP, go back to Phase 1.
 
-Group work units by dependency wave. **Execute each wave through Build + Land before
-starting the next wave.** After ALL waves are complete, proceed to Phase 4 (Eval).
-
-⚠️ **DO NOT call `dk_push` between waves or after landing.** `dk_merge` commits code to
-the dkod session. `dk_push` sends it to GitHub — that is SHIPPING. Shipping happens ONLY
-in Phase 5, after evaluation. If you catch yourself calling `dk_push` before `eval_reports`
-is populated, STOP. You are violating the harness.
-
-**For each wave (Wave 1, then Wave 2 if it exists):**
-
-#### Phase 2: BUILD (this wave)
-
-Dispatch ALL generators in this wave simultaneously:
+Dispatch ALL generators in `active_units` simultaneously in a single message:
 
 ```
 // Single message with multiple Agent tool calls:
@@ -126,54 +102,46 @@ Agent(
   description: "Build: <unit title>",
   name: "generator-<unit-id>"
 )
-// ... one per unit in this wave
+// ... one per unit in active_units
 ```
 
-Wait for all generators in this wave to complete.
+Wait for all generators to complete.
 
-**═══ GATE 2 CHECK (per wave) ═══**
-Before landing this wave, verify:
-- [ ] Every generator in this wave has reported back
+**═══ GATE 2 CHECK ═══**
+Before proceeding, verify:
+- [ ] Every generator has reported back
 - [ ] Every report includes a changeset_id
-- [ ] `changeset_ids` has one entry per unit in this wave
-
-In round 1, each wave contains the plan's units for that wave. In rounds 2+,
-`active_units` = only the failed units (re-assigned to Wave 1 since dependencies
-are already met).
+- [ ] `changeset_ids` has one entry per unit in `active_units`
 
 **If gate fails** → re-dispatch crashed generators. Do NOT proceed until all have submitted.
-**If gate passes** → set `changeset_ids = [...]`. Proceed to Land this wave.
+**If gate passes** → set `changeset_ids = [...]`. Proceed to Phase 3.
 
-#### Phase 3: LAND (this wave)
+---
 
-**Entry check**: `changeset_ids` for this wave must be non-empty.
+### PHASE 3 — LAND
 
-1. **Verify in PARALLEL** — `dk_verify` ALL changesets from this wave simultaneously
+**Entry check**: `changeset_ids` must be non-empty.
+
+1. **Verify in PARALLEL** — `dk_verify` ALL changesets simultaneously
 2. **Approve** — `dk_approve` each verified changeset
-3. **Merge sequentially** — `dk_merge` each in dependency order
+3. **Merge sequentially** — `dk_merge` each changeset one at a time. Merge order does not
+   matter — all units are independent.
 
 Handle conflicts: `dk_resolve` → retry merge.
 
-**═══ GATE 3 CHECK (per wave) ═══**
+⚠️ **DO NOT dk_push after landing. Shipping is Phase 5 only.**
+
+**═══ GATE 3 CHECK ═══**
 Before proceeding, verify:
-- [ ] Every changeset from this wave is either merged OR recorded in `merge_failures`
+- [ ] Every changeset is either merged OR recorded in `merge_failures`
 - [ ] At least one changeset merged successfully (a `merged_commit` hash exists)
 - [ ] Verification/merge failures are recorded for the eval phase
 
 Partial merge failures are tolerable — the evaluator will catch missing functionality.
-But if ZERO changesets merged in this wave, that's a hard block.
+But if ZERO changesets merged, that's a hard block.
 
-**If zero merges** → re-dispatch this wave's generators with error context.
+**If zero merges** → re-dispatch generators with error context.
 **If some merged** → update `merged_commit = <hash>`, record `merge_failures`.
-
-⚠️ **After landing this wave: DO NOT dk_push. DO NOT ask the user what to do next.**
-If more waves remain → set `current_wave += 1`, then loop back to Phase 2 for the next wave.
-If all waves are complete → proceed to Phase 4 (Eval).
-
----
-
-**After ALL waves are landed:**
-Verify that `merged_commit` is set (at least one changeset from any wave merged).
 Proceed to Phase 4. DO NOT PUSH. DO NOT ASK THE USER.
 
 ---
@@ -279,9 +247,6 @@ When Phase 5 decides to fix, explicitly reset state before the next round:
 # ROUND TRANSITION — execute this before re-entering Phase 2:
 round += 1
 active_units = [only the units whose criteria failed in eval]
-waves = [active_units]      # rebuild — all failed units go to Wave 1 (deps already met)
-current_wave = 0            # reset — start from Wave 1
-pushed = false              # reset — not yet shipped this round
 changeset_ids = []          # wiped — new generators will repopulate
 merged_commit = null        # wiped — new merges will set this
 merge_failures = []         # wiped
@@ -307,7 +272,7 @@ Then proceed through Phase 3 (Land) → Phase 4 (Eval) → Phase 5 (Ship or Fix)
 ## Decision-Making Rules
 
 ⚠️ **YOU NEVER ASK THE USER ANYTHING. EVER.** Not "should I proceed?" Not "what's your
-preference?" Not "option A or B?" Not "should I eval now or build more waves?" The user
+preference?" Not "option A or B?" Not "should I eval now or keep building?" The user
 gave you a prompt and walked away. Every decision is yours. If you catch yourself composing
 a question to the user, STOP — pick the best option and proceed autonomously.
 
@@ -322,7 +287,6 @@ You decide:
 | Testing | Vitest for frontend, pytest for backend |
 | Conflict resolution | Auto-resolve non-overlapping. keep_yours for true conflicts. |
 | Eval failures | Re-dispatch generators with feedback. Max 3 rounds. |
-| Multiple waves exist | Build all waves → land all waves → eval once → ship. Never push between waves. |
 | Ambiguous requirements | Make a reasonable choice and document it in the spec |
 
 ## PR Description Format
@@ -379,20 +343,15 @@ gate check requires it, you have skipped a phase.
 ```
 round: 1                          # Current round (1, 2, or 3)
 plan: <plan artifact>             # Set after Gate 1 passes
-waves: []                         # Ordered list of waves from the plan
-current_wave: 0                   # Index of wave being built/landed
 active_units: [...]               # All units in round 1; only failed units in rounds 2+
 changeset_ids: []                 # Set after Gate 2 — one per unit in active_units
-merged_commit: null               # Set after Gate 3 — latest commit hash after all merges
+merged_commit: null               # Set after Gate 3 — latest commit hash
 merge_failures: []                # Changesets that failed to merge (recorded, not blocking)
 eval_reports: []                  # Set after Gate 4 — MUST EXIST before dk_push
-pushed: false                     # Set ONLY in Phase 5 — dk_push is FORBIDDEN before Phase 5
 overall_pass_rate: "X/Y"          # Computed from eval_reports
 ```
 
 **Self-check before dk_push** (run this EVERY time before calling dk_push):
 1. "Is `eval_reports` populated with scores for every criterion? If NO → STOP. Phase 4 incomplete."
 2. "Am I in Phase 5? If NO → STOP. dk_push is only allowed in Phase 5."
-3. "Did I just finish landing a wave with more waves remaining? If YES → STOP. Build the next wave first."
-4. "Is `pushed` already `true`? If YES → STOP. Already shipped — do not push again."
 

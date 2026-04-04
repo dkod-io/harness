@@ -139,12 +139,11 @@ dk_push(mode: "pr", branch_name: "feat/task-management", pr_title: "...")
 ## The Landing Pipeline
 
 After all generators have submitted, the orchestrator runs the landing pipeline.
-Order matters — each merge may advance the HEAD, affecting subsequent merges.
 
 ### Sequential Landing
 
 ```
-for each changeset (in dependency order):
+for each changeset:
   1. dk_verify(changeset_id)
      → if FAIL: record failures, skip to next
   2. dk_approve()
@@ -158,12 +157,8 @@ for each changeset (in dependency order):
 rebase against the new HEAD. dkod handles this automatically (AST-level rebase), but the
 merges must happen one at a time.
 
-**Ordering strategy:**
-1. Merge Wave 1 units first (no dependencies)
-2. Then Wave 2 units (depend on Wave 1)
-3. Then Wave 3 units (depend on Wave 2)
-
-Within a wave, order doesn't matter — the units are independent by design.
+**Ordering:** Merge order doesn't matter -- all units are independent. dkod auto-rebases
+each changeset against the latest HEAD.
 
 ### Conflict Resolution Strategies
 
@@ -182,15 +177,11 @@ dk_resolve(resolution: "proceed")
 
 For the autonomous harness, use this decision tree:
 
-1. Is the conflicting symbol in a later-wave unit?
-   → `keep_yours` (the later wave should take precedence — it was designed to work with
-   the earlier wave's output)
-
-2. Is it in the same wave?
+1. Is it a conflict between two independent units?
    → `keep_yours` for the changeset being merged. The other changeset will auto-rebase
    on its turn. If it can't, the evaluator will catch the integration issue.
 
-3. Is it a setup/scaffolding conflict (package.json, config files)?
+2. Is it a setup/scaffolding conflict (package.json, config files)?
    → `keep_yours` with `force: true`. These are usually additive (both agents adding
    dependencies or config entries) and dkod will merge them.
 
@@ -228,7 +219,9 @@ Use this to:
 
 ### Greenfield Project Setup
 
-The first generator should scaffold the project:
+Scaffolding runs in parallel with feature generators -- no need to scaffold first. dkod
+merges the scaffolding output with all feature generator outputs at the AST level.
+
 ```
 dk_connect(agent_name: "generator-scaffolding", intent: "Project scaffolding")
 dk_file_write("package.json", "...")
@@ -240,35 +233,44 @@ dk_file_write("index.html", "...")
 dk_submit(intent: "Project scaffolding with Vite + React + TypeScript")
 ```
 
-This must be in Wave 1 and merged before feature generators start.
+This runs concurrently with all other generators. During landing, dkod auto-merges the
+scaffolding files with feature code regardless of merge order.
 
-### Shared Types Pattern
+### Inline Types Pattern
 
-If multiple generators need the same TypeScript interfaces:
+Generators define their own types locally instead of sharing a central type file.
+Type duplication is cheap; coordination between generators is expensive.
+
 ```
-// Wave 1 unit: "Shared types and interfaces"
-dk_file_write("src/types/index.ts", `
-  export interface User { id: string; email: string; name: string; }
-  export interface Task { id: string; title: string; userId: string; status: TaskStatus; }
-  export type TaskStatus = 'todo' | 'in_progress' | 'done';
+// generator-tasks defines its own types
+dk_file_write("src/api/tasks.ts", `
+  interface Task { id: string; title: string; userId: string; status: TaskStatus; }
+  type TaskStatus = 'todo' | 'in_progress' | 'done';
+  // ... implementation using these types
 `)
-dk_submit(intent: "Shared type definitions")
+
+// generator-users defines its own types independently
+dk_file_write("src/api/users.ts", `
+  interface User { id: string; email: string; name: string; }
+  // ... implementation using these types
+`)
 ```
 
-All Wave 2 generators can then import from `src/types/index.ts`.
+Each generator is self-contained. If types need to be shared later, the evaluator or a
+post-landing cleanup pass can consolidate them.
 
 ### Config File Merging
 
-Multiple generators may need to add to the same config:
-- Routes in `src/router.ts`
-- Dependencies in `package.json`
-- Environment variables in `.env`
+dkod handles config file merging automatically. Multiple generators can add to the same
+files simultaneously -- no special handling needed.
 
-dkod handles these via AST merge for code files. For JSON files (package.json), dkod
-merges at the key level — different keys auto-merge, same key conflicts.
+- **Code files** (router.ts, etc.) -- merged at the AST level
+- **JSON files** (package.json) -- merged at the key level
+- **Env files** (.env) -- merged line by line
 
-**Best practice:** Have the scaffolding unit create the config skeleton, and feature
-generators add only their specific entries.
+Multiple generators can add to `package.json`, `router.ts`, and `.env` at the same time.
+Different keys/routes/variables auto-merge; only true conflicts (same key, different value)
+require resolution.
 
 ### Test Alongside Implementation
 

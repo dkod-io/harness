@@ -20,8 +20,8 @@ If empty: "Usage: `/dkh:plan <build prompt>` — describe what you want planned.
 3. Display the resulting plan:
    - Specification summary
    - Work units with their acceptance criteria
-   - Dependency graph (which units run in parallel, which depend on others)
-   - Wave breakdown (Wave 1, Wave 2, etc.)
+   - Symbol ownership assignments
+   - Dispatch list (all units run simultaneously)
 
 ## Output
 
