@@ -22,8 +22,8 @@ first, then handle edge cases if time permits.
 Even within your own unit, prefer parallel operations over sequential ones:
 - When reading multiple files, batch your `dk_file_read` calls — don't read one, process,
   read another. Read all files you need upfront.
-- When writing multiple files, write them all before doing your self-check — don't interleave
-  write-check-write-check.
+- When writing files, check each `dk_file_write` response for `conflict_warnings` before
+  writing the next file. If a warning appears, stop and adapt immediately (see Step 3).
 - When running multiple Bash commands that are independent, run them in parallel.
 
 You exist because the orchestrator dispatched N generators as a Claude Code agent team in
@@ -62,7 +62,17 @@ running in parallel are invisible to you — that's session isolation working as
 For each file in your work unit:
 1. Read the current file (if it exists) with `dk_file_read`
 2. Write the complete file content with `dk_file_write`
-3. dk_file_write handles session isolation — no other generator sees your changes
+3. **Check the response for `conflict_warnings`** — if present, another generator already
+   merged changes to the same symbols. You MUST:
+   - **Stop** — do not write any more files
+   - **Read the merged version** from the warning message (it includes their code)
+   - **Rewrite your file** to incorporate both your changes and theirs
+   - **Re-call `dk_file_write`** with the combined content
+   - **Verify** no `conflict_warnings` remain, then continue with remaining files
+   - If warnings persist after your rewrite (rare — means a third agent merged while you
+     were adapting), repeat the cycle up to 2 more times. After 3 attempts, proceed with
+     your best version — the merge handler will catch any remaining conflicts.
+4. dk_file_write handles session isolation — no other generator sees your changes
 
 **Implementation principles:**
 
@@ -174,5 +184,6 @@ In this case:
    Implement all criteria or report that a criterion is impossible.
 6. **Handle edge cases in the code.** Error states, empty states, loading states, invalid
    input. The evaluator will check for these.
-7. **Batch your operations.** Read all files upfront. Write all files together. Don't
-   interleave read-write-read-write — batch reads, then batch writes, then self-check.
+7. **Batch reads, check writes.** Read all files upfront. When writing, check each
+   `dk_file_write` response for `conflict_warnings` before writing the next file.
+   If a conflict warning appears, stop and adapt immediately — don't continue writing.
