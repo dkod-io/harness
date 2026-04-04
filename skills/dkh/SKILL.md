@@ -73,46 +73,43 @@ USER PROMPT
 │  • dk_connect + dk_context (read codebase)          │
 │  • Decompose by SYMBOL, not file                    │
 │  • Define acceptance criteria per unit              │
-│  • Map dependencies between units                   │
 │                                                     │
 │  GATE 1 — Required output:                          │
 │  ✓ Specification with stack, features, data model   │
 │  ✓ Work units with symbols + acceptance criteria    │
-│  ✓ Dependency graph with wave assignments           │
+│  ✓ No duplicate symbol ownership                    │
 │  BLOCKED until all three exist.                     │
 └────────────────────┬────────────────────────────────┘
                      │
                      ▼
 ┌─────────────────────────────────────────────────────┐
-│  PHASES 2+3: BUILD AND LAND (per-wave loop)         │
-│                                                     │
-│  For EACH wave (Wave 1, then Wave 2 if exists):     │
-│                                                     │
-│  BUILD: N generators dispatched simultaneously      │
+│  PHASE 2: BUILD                                     │
+│  ALL N generators dispatched simultaneously         │
 │  Each agent:                                        │
 │  • dk_connect (own session, own overlay)            │
 │  • dk_context (understand target symbols)           │
 │  • dk_file_read → dk_file_write (implement)         │
 │  • dk_submit (changeset)                            │
 │                                                     │
-│  LAND: Orchestrator merges this wave's changesets    │
+│  GATE 2 — Required output:                          │
+│  ✓ Every generator reported with a changeset_id     │
+│  BLOCKED until all generators have submitted.       │
+├─────────────────────────────────────────────────────┤
+│  PHASE 3: LAND                                      │
+│  Orchestrator merges all changesets                  │
 │  • dk_verify ALL changesets in PARALLEL              │
 │  • dk_approve each verified changeset               │
 │  • dk_merge each sequentially                       │
 │                                                     │
-│  ⚠️  DO NOT dk_push between waves!                  │
+│  ⚠️  DO NOT dk_push after landing!                  │
 │  ⚠️  DO NOT ask the user what to do next!           │
-│  More waves? → loop back to BUILD next wave         │
-│  All waves done? → proceed to EVAL                  │
+│  Proceed directly to EVAL.                          │
 │                                                     │
-│  GATE 2+3 — Checked after EACH wave (Build + Land): │
-│  ✓ Every generator in this wave reported back       │
-│    with a changeset_id (GATE 2, per wave)           │
+│  GATE 3 — Required output:                          │
 │  ✓ Every changeset merged OR recorded as failed     │
-│    (GATE 3, per wave)                               │
 │  ✓ At least one changeset merged (commit hash       │
-│    exists) before proceeding to the next wave       │
-│  BLOCKED until the current wave fully resolves.     │
+│    exists)                                          │
+│  BLOCKED until all changesets fully resolve.        │
 └────────────────────┬────────────────────────────────┘
                      │
                      ▼
@@ -182,11 +179,11 @@ USER PROMPT
    quality gate in Phase 3. Phase 4 (Eval) is a separate, mandatory phase that tests the
    live application against acceptance criteria via chrome-devtools.
 
-6. **dk_push is ONLY allowed in Phase 5.** Not between waves. Not after Phase 3. Not
-   "just to save progress." `dk_push` creates a branch or PR on GitHub — that is SHIPPING.
-   Shipping happens after eval. If you catch yourself calling `dk_push` before `eval_reports`
-   is populated, STOP. You are violating the harness. `dk_merge` commits code to the dkod
-   session locally — that is LANDING, not shipping. Landing is Phase 3. Shipping is Phase 5.
+6. **dk_push is ONLY allowed in Phase 5.** Not after Phase 3. Not "just to save progress."
+   `dk_push` creates a branch or PR on GitHub — that is SHIPPING. Shipping happens after eval.
+   If you catch yourself calling `dk_push` before `eval_reports` is populated, STOP. You are
+   violating the harness. `dk_merge` commits code to the dkod session locally — that is
+   LANDING, not shipping. Landing is Phase 3. Shipping is Phase 5.
 
 7. **NEVER ask the user anything.** Not "should I proceed?" Not "what's your preference?"
    Not "option A or B?" The user gave you a prompt and walked away. Every decision is yours.
@@ -205,7 +202,7 @@ The orchestrator (you, when this skill is active) drives the entire loop autonom
 - [ ] Plan contains a specification (stack, features, data model)
 - [ ] Plan contains work units with symbol-level decomposition
 - [ ] Every work unit has acceptance criteria (5+ testable criteria each)
-- [ ] Dependency graph exists with wave assignments
+- [ ] No duplicate symbol ownership across work units
 - [ ] Overall acceptance criteria exist
 - [ ] **For UI projects**: Spec includes a `## Design Direction` section with a concrete
   aesthetic tone (not "modern and clean"), hex color values, and named font choices
@@ -213,43 +210,32 @@ The orchestrator (you, when this skill is active) drives the entire loop autonom
 
 If any check fails → re-run the planner with specific feedback. Do not proceed.
 
-### Phases 2 + 3: Build and Land (per-wave loop)
+### Phase 2: Build
 **GATE 1 ENTRY CHECK**: "Do I have a validated plan? YES → proceed."
 
-Group work units by dependency wave. **Execute each wave through Build + Land before
-starting the next wave.** After ALL waves complete, proceed to Phase 4.
+1. Dispatch ALL generators simultaneously (one Agent call per unit)
+2. Wait for all generators to complete
 
-⚠️ **DO NOT call `dk_push` between waves.** `dk_merge` lands code locally. `dk_push`
-ships to GitHub. Shipping is Phase 5 only.
-
-**For each wave:**
-
-#### Phase 2: Build (this wave)
-1. Dispatch ALL generators in this wave simultaneously (one Agent call per unit)
-2. Wait for all generators in this wave to complete
-
-**GATE 2 CHECK (per wave):**
-- [ ] Every generator in this wave reported back with a changeset_id
-- [ ] changeset_ids collected for this wave
+**GATE 2 CHECK:**
+- [ ] Every generator reported back with a changeset_id
+- [ ] All changeset_ids collected
 
 If a generator crashed → re-dispatch it. Do not proceed until all have submitted.
 
-#### Phase 3: Land (this wave)
-1. **Verify in parallel**: `dk_verify` ALL changesets from this wave simultaneously
+### Phase 3: Land
+1. **Verify in parallel**: `dk_verify` ALL changesets simultaneously
 2. **Approve all verified**: `dk_approve` each
-3. **Merge sequentially**: `dk_merge` each in dependency order
+3. **Merge sequentially**: `dk_merge` each one at a time
 4. Handle conflicts: `dk_resolve` → retry
 
-**GATE 3 CHECK (per wave):**
+**DO NOT dk_push. Shipping is Phase 5 only.**
+
+**GATE 3 CHECK:**
 - [ ] Every changeset merged OR recorded as failed with reason
 - [ ] At least one changeset merged (commit hash exists)
 
-⚠️ **After landing this wave: DO NOT dk_push. DO NOT ask the user.**
-More waves remain → loop back to Build for the next wave.
-All waves complete → proceed to Phase 4 (Eval).
-
 Partial merge failures are tolerable — the evaluator will catch missing functionality.
-Zero merges **in this wave** is a hard block — re-dispatch this wave's generators before advancing.
+Zero merges is a hard block — re-dispatch generators before advancing.
 
 ### Phase 4: Eval — MANDATORY, NEVER SKIP
 **GATE 3 ENTRY CHECK**: "Did at least one changeset merge? Do I have a commit hash? YES → proceed."
@@ -315,9 +301,9 @@ dkod gives each worker an isolated workspace that merges cleanly. Together, they
 60-minute serial build into a 10-minute parallel build.
 
 **This applies to EVERY phase:**
-- **Plan**: The planner designs for maximum Wave 1 coverage — flatten the dependency graph
-  so the most units run simultaneously.
-- **Build**: ALL generators in a wave dispatch in a single message as parallel agents.
+- **Plan**: The planner produces N units with non-overlapping symbol ownership.
+  All dispatch at once.
+- **Build**: ALL generators dispatch in a single message as parallel agents.
   Use `run_in_background: true` when you have other work to do while waiting.
 - **Land**: Run `dk_verify` on ALL changesets in parallel (each verify is independent).
   Only `dk_merge` must be sequential (each merge advances HEAD).
@@ -372,18 +358,13 @@ The Planner produces work units in this structure (embedded in the plan artifact
 ```
 ## Work Unit: <id>
 **Title:** <descriptive title>
-**Symbols to modify:** <list of qualified symbol names>
-**Symbols to create:** <list of new symbols with file paths>
-**Files touched:** <list of files>
-**Depends on:** <list of other unit IDs, or "none">
+**OWNS (exclusive):** <list of qualified symbol names this unit solely owns>
+**Creates:** <list of new symbols with file paths>
 **Acceptance criteria:**
 - <testable criterion 1>
 - <testable criterion 2>
 **Complexity:** low | medium | high
 ```
-
-Units with `depends_on: none` run in the first wave. Units with dependencies run after their
-dependencies complete. The orchestrator handles wave scheduling automatically.
 
 ## Agent Definitions
 

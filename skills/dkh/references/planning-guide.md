@@ -14,6 +14,21 @@ This means your decomposition should target **symbols** (functions, classes, mod
 files. A single file can be safely touched by multiple generators as long as they're working on
 different symbols within it.
 
+## dkod Eliminates Serialization
+
+With dkod, there is NO reason to serialize work between generators:
+
+- **Same file?** dkod merges at the AST level. Two generators editing different functions
+  in the same file → zero conflicts, auto-merged.
+- **Same config file?** dkod merges JSON at the key level, code at the symbol level.
+- **Import dependencies?** Generators inline their own types. No waiting for another unit.
+- **Scaffolding needed first?** No — scaffolding runs in parallel with features. dkod
+  merges the scaffolding generator's `package.json` with the feature generator's code.
+
+**ALL units dispatch simultaneously. There are no waves. There are no dependencies.**
+The planner's only structural constraint is symbol ownership — no two units may create
+or modify the same function, component, or class.
+
 ## Decomposition Patterns
 
 ### Pattern 1: Feature Vertical Slices
@@ -34,28 +49,7 @@ Both units may touch `src/api/index.ts` (to register routes) — different symbo
 
 **When to use:** Features with low coupling. Each feature is mostly self-contained.
 
-### Pattern 2: Layer-Based Decomposition
-
-Split by architectural layer when features are heavily interconnected:
-
-```
-Unit: "Database Schema and Models"
-  Symbols: createSchema(), User, Task, Tag, migrate()
-  Files: src/db/schema.ts, src/models/*.ts
-
-Unit: "API Handlers"
-  Symbols: all *Handler() functions, validation schemas
-  Files: src/api/*.ts
-
-Unit: "Frontend Components"
-  Symbols: all React components, hooks, utility functions
-  Files: src/components/*.tsx, src/hooks/*.ts, src/pages/*.tsx
-```
-
-**When to use:** Features share many dependencies (e.g., all API handlers use the same models).
-Layer units have clear dependency order: schema → API → frontend.
-
-### Pattern 3: Batch Operation
+### Pattern 2: Batch Operation
 
 Apply the same pattern across many modules:
 
@@ -77,63 +71,32 @@ All three run in parallel. Same pattern, different targets.
 
 **When to use:** Repetitive changes across similar modules.
 
-### Pattern 4: Setup + Feature Waves
+## What is NOT a Dependency
 
-First wave establishes infrastructure, subsequent waves build on it:
+With dkod's AST-level merging, almost nothing that feels like a dependency actually is one:
 
-```
-Wave 1 (parallel):
-  Unit: "Project scaffolding" — package.json, tsconfig, vite.config, main entry
-  Unit: "Design system" — colors, typography, component primitives, Tailwind config
-  Unit: "Database setup" — schema, migrations, connection, seed data
+| Situation | Why it is NOT a dependency |
+|---|---|
+| Two units edit the same file | dkod merges at the symbol level — different functions in the same file auto-merge |
+| Unit B imports a type that Unit A defines | Each generator inlines its own types. No waiting. |
+| Both units add to `package.json` | dkod merges JSON at the key level — additions from both units coexist |
+| Both units add routes to a router | dkod deduplicates and merges route registrations |
+| Unit B needs scaffolding that Unit A creates | Scaffolding runs in parallel. dkod merges the scaffolding output with feature code. |
+| Both units create test files for different modules | Completely independent — no conflict possible |
+| Unit B renders a component that Unit A creates | Unit B inlines a stub or its own version. The merge pass reconciles. |
+| Both units use the same utility library | Both import independently — no coordination needed |
 
-Wave 2 (parallel, after Wave 1):
-  Unit: "Auth API + Auth UI"
-  Unit: "Dashboard page + data fetching"
-  Unit: "Settings page + user preferences"
+**The only real constraint is symbol ownership.** No two units may create or modify the
+same function, component, or class. Everything else merges automatically.
 
-Wave 3 (parallel, after Wave 2):
-  Unit: "Integration tests"
-  Unit: "Error handling and loading states"
-  Unit: "Performance optimization"
-```
+### There Are No Dependencies
 
-**When to use:** Greenfield projects that need scaffolding before features.
+Every unit is independent. There are no dependency graphs. No wave assignments. No
+`depends_on` fields.
 
-## Dependency Analysis
-
-### What Creates a Dependency
-
-A unit depends on another when:
-- It imports a symbol that the other unit creates (e.g., importing a model from the schema unit)
-- It extends or implements a type from the other unit
-- It renders a component that the other unit creates
-- It reads data from a database table that the other unit defines
-- It calls an API endpoint that the other unit implements
-
-### What Does NOT Create a Dependency
-
-- Touching the same file (dkod handles this via AST merge)
-- Using the same utility library (both can import independently)
-- Adding to the same configuration file (e.g., both adding routes to a router — dkod deduplicates)
-- Creating parallel test files for different modules
-
-### Minimize Dependencies
-
-Every dependency serializes work. Strategies to reduce them:
-
-1. **Define interfaces early.** If Unit B needs a type from Unit A, can you put the interface
-   in a shared types file in a Wave 1 unit? Then both A and B can run in Wave 2.
-
-2. **Use dependency injection.** If Unit B needs Unit A's database connection, can Unit B
-   accept it as a parameter instead of importing it directly? Then both can be created in
-   parallel with a later integration unit.
-
-3. **Stub external dependencies.** If Unit B needs an API that Unit A builds, can Unit B use
-   mock data initially? Then a fix round can wire up the real connection.
-
-4. **Merge setup into fewer units.** If 5 units all depend on the same scaffolding, put all
-   scaffolding in one Wave 1 unit.
+If you catch yourself thinking "Unit B should run after Unit A" — stop. Inline what Unit B
+needs. Let dkod merge the results. The planner never sequences units; it dispatches them
+all at once and lets the merge engine handle the rest.
 
 ## Sizing Work Units
 
