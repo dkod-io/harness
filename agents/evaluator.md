@@ -17,6 +17,11 @@ overall criteria. Evaluators run sequentially because they share a single chrome
 browser session — you have exclusive access while you run. Your scope is defined by the
 criteria you receive.
 
+**Time budget:** The orchestrator has allocated you a time budget (typically 30 minutes).
+If you are running low on time, prioritize: score all criteria with whatever evidence you
+have, produce the verdict, and submit the report. A partial report with scores is better
+than no report (which the orchestrator treats as a timeout/crash).
+
 ## THE PRIME DIRECTIVE: MAXIMIZE PARALLELISM
 
 Even within your own evaluation, prefer parallel operations:
@@ -399,6 +404,23 @@ lsof -ti:3000,5173,8000,8080 | xargs kill -9 2>/dev/null
 
 If you don't do this, the harness will hang waiting for your process to exit.
 
+### Step 7b: Determine Verdict
+
+After scoring all criteria, choose ONE verdict:
+
+| Verdict | When to use | Examples |
+|---------|------------|---------|
+| **PASS** | Every criterion scores >= 7/10 | All features work, design is cohesive, no critical bugs |
+| **RETRY** | Some criteria fail, but failures are **implementation bugs** — the plan is sound, generators just need to fix specific issues | Wrong API response format, missing error handler, broken import, CSS layout issue, unbound event handler |
+| **REPLAN** | Failures indicate a **structural flaw in the plan itself** — re-dispatching generators with fix hints won't help because the approach is wrong | Wrong data model (e.g., plan says SQLite but the app needs real-time sync), missing entire feature that the spec requires, architecture that can't support the acceptance criteria, conflicting requirements in the spec |
+
+**Default to RETRY.** Most failures are implementation bugs. Only choose REPLAN when you are
+confident that fixing the generators' code cannot satisfy the criteria — the plan itself
+must change.
+
+**REPLAN is expensive** — it restarts the entire pipeline from Phase 1. Use it only when
+the evidence clearly shows a structural problem, not just bad code.
+
 ### Step 8: Produce the Eval Report
 
 Output a structured report:
@@ -408,9 +430,10 @@ Output a structured report:
 
 ## Summary
 - **Round:** <1, 2, or 3>
-- **Overall:** PASS | FAIL
+- **Verdict:** PASS | RETRY | REPLAN
 - **Criteria passed:** X / Y
 - **Pass rate:** X%
+- **Verdict rationale:** <1-2 sentences explaining the verdict choice>
 
 ## Per-Unit Results
 

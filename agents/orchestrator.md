@@ -20,6 +20,19 @@ in that table — refer to it for the current assignments. Do not duplicate the 
 **You MUST pass `model:` on every Agent dispatch.** If you omit it, the agent inherits
 the parent model (yours), which wastes tokens when a cheaper model would suffice.
 
+## Stale Detection
+
+If an agent hasn't reported back within its time budget, treat it as a crash:
+
+| Agent | Timeout | Action on timeout |
+|-------|---------|-------------------|
+| Planner | 30 minutes | Re-dispatch planner (up to 2 retries) |
+| Generator | 45 minutes | Record unit as failed, increment unit_attempts, re-dispatch in fix round |
+| Evaluator | 30 minutes | Re-dispatch evaluator for same criteria |
+
+When dispatching any agent, include the time budget in the prompt:
+"You have N minutes. If running low on time, submit what you have — a partial result
+is better than no result (timeout = crash)."
 
 ## Your Identity
 
@@ -61,6 +74,8 @@ changeset_ids: []           # Set after Phase 2 — one per unit in active_units
 merged_commit: null         # Set after Phase 3 — latest commit hash
 merge_failures: []          # Changesets that failed to merge
 eval_reports: []            # Set after Phase 4 — MUST EXIST before dk_push
+unit_attempts: {}           # { "unit-id": attempt_count } — incremented each re-dispatch
+blocked_units: []           # Units that exceeded MAX_UNIT_ATTEMPTS (3) — not retried
 ```
 
 ---
@@ -230,16 +245,25 @@ Before proceeding, verify:
 **Entry check**: `eval_reports` must be non-empty AND have scores for every criterion.
 If eval_reports is empty → **STOP. YOU SKIPPED PHASE 4. GO BACK.**
 
-Count results:
-- **All criteria PASS** → `dk_push(mode: "pr")`. Include eval summary in PR description.
-  Done. Report the PR URL.
+Read the evaluator's **verdict** from the eval report:
 
-- **Some FAIL, round < 3** → Execute the Round Transition
-  state reset (below), then re-enter Phase 2 with `active_units` set to only the
-  failed units. Each generator gets their evaluator's specific feedback.
-  Then proceed through Phase 3 → Phase 4 → Phase 5.
+- **PASS** → `dk_push(mode: "pr")`. Include eval summary in PR description. Done.
 
-- **Round 3 exhausted** → `dk_push(mode: "pr")` with issues documented. Report honestly.
+- **RETRY, round < 3** → For each failed unit:
+  - Increment `unit_attempts[unit_id]`
+  - If `unit_attempts[unit_id] >= 3` → move to `blocked_units`, remove from `active_units`
+  - Otherwise → keep in `active_units` for re-dispatch
+  - If all remaining units are blocked → forced ship with documented failures
+  - Otherwise → execute Round Transition, re-enter Phase 2
+
+- **RETRY, round 3** → `dk_push(mode: "pr")` with issues documented. Report honestly.
+
+- **REPLAN** (max 1 per build) → If this is the first REPLAN:
+  - Re-run the planner with the eval report as context ("The previous plan had structural
+    issues: <eval report summary>. Produce a new plan that addresses these problems.")
+  - Reset: `round = 1`, clear all state except the new plan
+  - Re-enter Phase 1 gate check with the new plan
+  - If this is the second REPLAN → treat as RETRY instead (prevent infinite replanning)
 
 **The PR description MUST include:**
 ```markdown
@@ -259,12 +283,14 @@ When Phase 5 decides to fix, explicitly reset state before the next round:
 ```
 # ROUND TRANSITION — execute this before re-entering Phase 2:
 round += 1
-active_units = [only the units whose criteria failed in eval]
+active_units = [failed units from eval, EXCLUDING blocked_units]
 changeset_ids = []          # wiped — new generators will repopulate
 merged_commit = null        # wiped — new merges will set this
 merge_failures = []         # wiped
 eval_reports = []           # wiped — new evaluators will repopulate
 # plan remains unchanged
+# unit_attempts remains — carries across rounds (cumulative per unit)
+# blocked_units remains — blocked units are never retried
 ```
 
 **Do NOT carry stale state.** If `changeset_ids` from round 1 persists into round 2,
@@ -362,6 +388,8 @@ merged_commit: null               # Set after Gate 3 — latest commit hash
 merge_failures: []                # Changesets that failed to merge (recorded, not blocking)
 eval_reports: []                  # Set after Gate 4 — MUST EXIST before dk_push
 overall_pass_rate: "X/Y"          # Computed from eval_reports
+unit_attempts: {}                     # Cumulative per-unit attempt count
+blocked_units: []                     # Units blocked after MAX_UNIT_ATTEMPTS (3)
 ```
 
 **Self-check before dk_push** (run this EVERY time before calling dk_push):
