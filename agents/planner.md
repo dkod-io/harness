@@ -4,7 +4,6 @@ description: >
   Expands a brief user prompt into a full specification with parallel work units decomposed
   by symbol. Produces the blueprint that generators execute. dkod-aware — designs for parallel
   execution from the start.
-model: opus
 maxTurns: 30
 ---
 

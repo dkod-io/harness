@@ -58,6 +58,29 @@ from the spec manually. The planner's Design Direction section provides all the 
 direction needed — generators should treat it as their design brief and apply it directly
 without invoking the skill.
 
+## Model Profiles
+
+**Active profile: balanced**
+
+Each agent runs on a model appropriate to its task. The orchestrator reads the active
+profile and passes `model:` on every Agent dispatch call.
+
+| Agent | quality | balanced | budget |
+|-------|---------|----------|--------|
+| **Orchestrator** | opus | opus | sonnet |
+| **Planner** | opus | opus | sonnet |
+| **Generator** | opus | sonnet | sonnet |
+| **Evaluator** | opus | sonnet | haiku |
+
+- **quality** — All Opus. Maximum capability. Use for complex or high-stakes builds.
+- **balanced** (default) — Opus for planning and orchestration, Sonnet for implementation
+  and evaluation. Best cost/quality trade-off.
+- **budget** — Sonnet for planning and implementation, Haiku for evaluation. Fastest and
+  cheapest. Use for simple builds or iteration.
+
+To switch profiles, change `Active profile:` above. The orchestrator reads this value
+at the start of each run.
+
 ## The Autonomous Loop — STRICT GATES
 
 Each phase produces a required artifact. The next phase CANNOT start until the gate check

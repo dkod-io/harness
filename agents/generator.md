@@ -4,7 +4,6 @@ description: >
   Implements a single work unit from the harness plan via an isolated dkod session. Receives
   a spec, a work unit, and acceptance criteria. Writes code, submits the changeset, and reports
   completion. Does not merge — the orchestrator handles landing.
-model: opus
 maxTurns: 80
 ---
 

@@ -19,7 +19,8 @@ If empty, the evaluator will:
 ## Execution
 
 1. Verify chrome-devtools MCP is available (fall back to Bash-based testing if not)
-2. Spawn the evaluator agent with:
+2. Read the **Active profile** from `skills/dkh/SKILL.md` (Model Profiles section)
+3. Spawn the evaluator agent with `model:` from the active profile's Evaluator row:
    - Current codebase state
    - Acceptance criteria (from arguments, plan files, or inferred)
 3. The evaluator:
