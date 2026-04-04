@@ -96,6 +96,7 @@ USER PROMPT
 │  PHASE 1: PLAN                                      │
 │  Planner agent: prompt → spec → work units          │
 │  • dk_connect + dk_context (read codebase)          │
+│  • Auto-discover PRD.md / SPEC.md / DESIGN.md       │
 │  • Decompose by SYMBOL, not file                    │
 │  • Define acceptance criteria per unit              │
 │                                                     │
@@ -158,24 +159,20 @@ USER PROMPT
 │  BLOCKED until all eval reports collected.           │
 └────────────────────┬────────────────────────────────┘
                      │
-              ┌──────┴──────┐
-              ▼             ▼
-           ALL PASS      FAILURES
-              │             │
-              ▼             ▼
-┌──────────────────┐  ┌──────────────────────────────┐
-│  PHASE 5: SHIP   │  │  PHASE 2b: FIX (parallel)    │
-│                  │  │  Re-dispatch generators with  │
-│  GATE 5:         │  │  specific eval feedback.      │
-│  ✓ Eval report   │  │  Max 3 rounds total.          │
-│    shows ALL     │  │  Then back to BUILD → LAND →  │
-│    PASS, OR      │  └──────────────────────────────┘
-│  ✓ Round 3       │
-│    exhausted     │
-│                  │
-│  dk_push(PR)     │
-│  Done.           │
-└──────────────────┘
+              ┌──────┴───────┬──────────────┐
+              ▼              ▼              ▼
+           PASS           RETRY          REPLAN
+              │              │              │
+              ▼              ▼              ▼
+┌──────────────────┐  ┌────────────────┐  ┌────────────────────┐
+│  PHASE 5: SHIP   │  │  FIX (parallel)│  │  RE-PLAN           │
+│                  │  │  Re-dispatch   │  │  Re-run planner    │
+│  dk_push(PR)     │  │  failed units  │  │  with eval report  │
+│  Done.           │  │  Max 3 rounds  │  │  Max 1 replan/build│
+│                  │  │  Auto-block    │  │  Then BUILD → LAND │
+│                  │  │  after 3 unit  │  │  → EVAL again      │
+│                  │  │  attempts      │  │                    │
+└──────────────────┘  └────────────────┘  └────────────────────┘
 ```
 
 ### GATE ENFORCEMENT RULES
@@ -292,17 +289,21 @@ Zero merges is a hard block — re-dispatch generators before advancing.
 
 If an evaluator crashed → re-dispatch that evaluator. Do not proceed without complete reports.
 
-### Phase 5: Ship or Fix
+### Phase 5: Ship, Fix, or Replan
 **GATE 4 ENTRY CHECK**: "Do I have complete eval reports with scores for every criterion?
 YES → proceed. NO → GO BACK TO PHASE 4."
 
-- **All criteria PASS** → `dk_push(mode: "pr")`. Create the PR. Done.
-- **Some criteria FAIL** (round < 3) → Execute Round Transition state reset, then
-  re-enter Phase 2 with only the failed units. Proceed through Phase 2 → 3 → 4 → 5.
-- **Still failing after round 3** → `dk_push(mode: "pr")` with issues documented in PR.
+Read the evaluator's **verdict**:
+- **PASS** → `dk_push(mode: "pr")`. Create the PR. Done.
+- **RETRY** (round < 3) → Increment per-unit attempt counts. Auto-block units with 3+
+  attempts. Re-dispatch remaining failed units with feedback. Phase 2 → 3 → 4 → 5.
+- **RETRY** (round 3) → `dk_push(mode: "pr")` with issues documented.
+- **REPLAN** (max 1 per build) → Re-run planner with eval report. Reset round to 1.
+  Back to Phase 1 gate check.
 
-**FINAL GATE**: The PR description MUST include the eval results (scores, pass rate, evidence
-summary). If the PR description doesn't reference eval results, you skipped Phase 4.
+**FINAL GATE**: The PR description MUST include the eval results (scores, pass rate,
+verdict, evidence summary). If the PR description doesn't reference eval results, you
+skipped Phase 4.
 
 ## Critical Design Principles
 

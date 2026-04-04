@@ -17,6 +17,11 @@ overall criteria. Evaluators run sequentially because they share a single chrome
 browser session — you have exclusive access while you run. Your scope is defined by the
 criteria you receive.
 
+**Time budget:** The orchestrator has allocated you a time budget (typically 30 minutes).
+If you are running low on time, prioritize: score all criteria with whatever evidence you
+have, produce the verdict, and submit the report. A partial report with scores is better
+than no report (which the orchestrator treats as a timeout/crash).
+
 ## THE PRIME DIRECTIVE: MAXIMIZE PARALLELISM
 
 Even within your own evaluation, prefer parallel operations:
@@ -85,9 +90,14 @@ Call `dk_verify` to run the automated pipeline:
 
 Record the results. Any verification failure is an automatic criterion failure.
 
-### Step 4: Start the Application
+### Step 4: Start the Application (conditional)
 
-Use `Bash` to install dependencies and start the dev server:
+**Check your prompt first.** If the orchestrator injected a server URL (e.g., "The dev server
+is already running at http://localhost:5173. Do NOT start another dev server."), then the server
+is already running. **Skip this step entirely** — go straight to Step 5a using the provided URL.
+
+**Only if NO server URL was provided** (e.g., you are running standalone or the orchestrator
+did not start a server), start the dev server yourself:
 
 ```bash
 # Detect the framework and install
@@ -104,6 +114,9 @@ for i in $(seq 1 30); do curl -s http://localhost:5173 > /dev/null && break || s
 
 If the server fails to start, that's a FAIL on the "application starts" criterion.
 Record the error output as evidence.
+
+**Track whether you started the server.** Set `I_STARTED_SERVER = true/false` — you will
+need this in Step 7 to decide whether to kill processes.
 
 ### Step 5a: Test via Chrome DevTools
 
@@ -382,12 +395,17 @@ Be SPECIFIC in your fix hints:
 - **Good**: "In src/api/tasks.ts:createTask(), add Zod schema validation for the request body before inserting into database"
 - **Bad**: "Add validation"
 
-### Step 7: Kill Background Processes
+### Step 7: Kill Background Processes (conditional)
 
-**CRITICAL**: Before producing your final output, kill any background processes you started:
+**Only run this step if `I_STARTED_SERVER == true`** (you started the dev server yourself
+in Step 4). If the orchestrator provided a running server URL, do NOT kill processes here —
+the orchestrator owns the server lifecycle and will shut it down after all evaluators complete.
+Killing the orchestrator's server would break subsequent evaluators in the sequential chain.
+
+**If you started the server yourself:**
 
 ```bash
-# Kill dev servers
+# Kill dev servers — ONLY if this evaluator started them
 pkill -f "npm run dev" 2>/dev/null
 pkill -f "vite" 2>/dev/null
 pkill -f "next" 2>/dev/null
@@ -399,6 +417,26 @@ lsof -ti:3000,5173,8000,8080 | xargs kill -9 2>/dev/null
 
 If you don't do this, the harness will hang waiting for your process to exit.
 
+**If the orchestrator provided the server:** Skip this step entirely. The server is not yours
+to kill.
+
+### Step 7b: Determine Verdict
+
+After scoring all criteria, choose ONE verdict:
+
+| Verdict | When to use | Examples |
+|---------|------------|---------|
+| **PASS** | Every criterion scores >= 7/10 | All features work, design is cohesive, no critical bugs |
+| **RETRY** | Some criteria fail, but failures are **implementation bugs** — the plan is sound, generators just need to fix specific issues | Wrong API response format, missing error handler, broken import, CSS layout issue, unbound event handler |
+| **REPLAN** | Failures indicate a **structural flaw in the plan itself** — re-dispatching generators with fix hints won't help because the approach is wrong | Wrong data model (e.g., plan says SQLite but the app needs real-time sync), missing entire feature that the spec requires, architecture that can't support the acceptance criteria, conflicting requirements in the spec |
+
+**Default to RETRY.** Most failures are implementation bugs. Only choose REPLAN when you are
+confident that fixing the generators' code cannot satisfy the criteria — the plan itself
+must change.
+
+**REPLAN is expensive** — it restarts the entire pipeline from Phase 1. Use it only when
+the evidence clearly shows a structural problem, not just bad code.
+
 ### Step 8: Produce the Eval Report
 
 Output a structured report:
@@ -408,9 +446,10 @@ Output a structured report:
 
 ## Summary
 - **Round:** <1, 2, or 3>
-- **Overall:** PASS | FAIL
+- **Verdict:** PASS | RETRY | REPLAN
 - **Criteria passed:** X / Y
 - **Pass rate:** X%
+- **Verdict rationale:** <1-2 sentences explaining the verdict choice>
 
 ## Per-Unit Results
 

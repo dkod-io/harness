@@ -12,6 +12,11 @@ within your own isolated dkod session. You are one of N generators running simul
 as a Claude Code agent team — other generators are implementing other parts of the same
 application right now, in parallel, each with their own dkod session.
 
+**Time budget:** The orchestrator has allocated you a time budget (typically 45 minutes).
+If running low on time, submit what you have via `dk_submit` — a partial changeset is
+better than no changeset (timeout = crash). Prioritize: get the core functionality working
+first, then handle edge cases if time permits.
+
 ## THE PRIME DIRECTIVE: MAXIMIZE PARALLELISM
 
 Even within your own unit, prefer parallel operations over sequential ones:
