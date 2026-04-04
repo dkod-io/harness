@@ -140,20 +140,34 @@ USER PROMPT
                      │
                      ▼
 ┌─────────────────────────────────────────────────────┐
+│  SMOKE TEST — MANDATORY BEFORE EVAL                  │
+│  *** App MUST start and load before eval ***         │
+│                                                     │
+│  • Install deps, start dev server                   │
+│  • Navigate to app in browser (chrome-devtools)     │
+│  • Take screenshot — must show real content          │
+│  • Check console — no fatal errors                  │
+│                                                     │
+│  FAIL? → Fix round (build failure, not eval)        │
+│  PASS? → Proceed to EVAL with server running        │
+└────────────────────┬────────────────────────────────┘
+                     │
+                     ▼
+┌─────────────────────────────────────────────────────┐
 │  PHASE 4: EVAL (sequential) — MANDATORY              │
 │  *** YOU CANNOT SKIP THIS PHASE ***                  │
 │  *** dk_push IS BLOCKED UNTIL EVAL COMPLETES ***     │
 │                                                     │
-│  Orchestrator starts dev server ONCE, then:         │
+│  Dev server already running from smoke test.        │
 │  Evaluators run ONE AT A TIME (shared browser):     │
 │  • One evaluator per work unit (sequential)         │
-│  • Each: connect to shared dev server, test via     │
-│    chrome-devtools, grade criteria with evidence     │
+│  • Each: test via chrome-devtools, grade criteria   │
 │  • One final evaluator for overall/integration      │
 │                                                     │
 │  GATE 4 — Required output:                          │
 │  ✓ Eval report exists for EVERY work unit           │
 │  ✓ Each report has scores + evidence per criterion  │
+│  ✓ At least one screenshot in eval evidence         │
 │  ✓ Overall integration report exists                │
 │  ✓ Every criterion scored (no unscored criteria)    │
 │  BLOCKED until all eval reports collected.           │
@@ -193,7 +207,7 @@ USER PROMPT
    that Phase N-1's required output exists:
    - Phase 2 starts: "Do I have a plan with work units and criteria? YES → proceed"
    - Phase 3 starts: "Do I have changeset IDs from all dispatched generators? YES → proceed"
-   - Phase 4 starts: "Did at least one changeset merge? Do I have a commit hash? YES → proceed"
+   - Phase 4 starts: "Did the smoke test pass? Is the dev server running? YES → proceed"
    - Phase 5 starts: "Do I have eval reports for every unit? YES → proceed"
 
 5. **dk_verify is NOT evaluation.** `dk_verify` runs lint/type-check/test. It does NOT start
@@ -210,6 +224,13 @@ USER PROMPT
 7. **NEVER ask the user anything.** Not "should I proceed?" Not "what's your preference?"
    Not "option A or B?" The user gave you a prompt and walked away. Every decision is yours.
    If you are composing a question to the user, STOP. Pick the best option and proceed.
+
+8. **The app MUST start and load before dk_push.** After landing code, you MUST run a smoke
+   test: start the dev server, navigate to the app in the browser, take a screenshot, and
+   confirm it renders real content (not an error overlay, not a blank page, not a crash).
+   If the smoke test fails, that is a build failure — enter a fix round. Do NOT dispatch
+   evaluators on a broken app. Do NOT produce "degraded eval reports" to bypass this gate.
+   **No screenshot in eval evidence = the app was never tested = gate violation.**
 
 ## Orchestrator Behavior — Phase-by-Phase with Gate Checks
 
@@ -259,15 +280,26 @@ If a generator crashed → re-dispatch it. Do not proceed until all have submitt
 Partial merge failures are tolerable — the evaluator will catch missing functionality.
 Zero merges is a hard block — re-dispatch generators before advancing.
 
-### Phase 4: Eval — MANDATORY, NEVER SKIP
+### Smoke Test — MANDATORY BEFORE EVAL
 **GATE 3 ENTRY CHECK**: "Did at least one changeset merge? Do I have a commit hash? YES → proceed."
+
+Before dispatching evaluators, verify the app actually starts and loads:
+1. Install deps, start dev server, wait for port
+2. Navigate to the app with chrome-devtools, take a screenshot
+3. Confirm the screenshot shows real content (not error overlay, not blank page)
+4. Check console for fatal errors
+
+**If smoke test FAILS** → build failure. Enter fix round with crash error as feedback.
+DO NOT dispatch evaluators on a broken app.
+**If smoke test PASSES** → proceed to Phase 4 with the server already running.
+
+### Phase 4: Eval — MANDATORY, NEVER SKIP
 
 ⚠️ **THIS PHASE IS NOT OPTIONAL. dk_verify IS NOT A SUBSTITUTE FOR EVALUATION.**
 ⚠️ **YOU MUST DISPATCH EVALUATOR AGENTS BEFORE YOU CAN CALL dk_push.**
 
-1. **Start the dev server ONCE** as the orchestrator (install deps, run dev command,
-   wait for the port to be ready). Record the server URL.
-2. **Dispatch evaluators sequentially** (one at a time): One evaluator per work unit,
+Dev server is already running from the smoke test.
+1. **Dispatch evaluators sequentially** (one at a time): One evaluator per work unit,
    then one for overall integration. Pass the already-running server URL. Evaluators
    run sequentially because they share a single chrome-devtools browser session —
    parallel evaluators would race on navigate/screenshot/click calls, corrupting evidence.
@@ -285,6 +317,8 @@ Zero merges is a hard block — re-dispatch generators before advancing.
 - [ ] I have an overall/integration eval report
 - [ ] Every acceptance criterion has a score (no unscored criteria)
 - [ ] Every score has evidence (screenshots, console output, test results)
+- [ ] **At least one screenshot exists in the eval evidence** — if zero screenshots,
+  the evaluator did not actually test the live app. That is a gate failure.
 - [ ] Pass/fail counts are calculated
 
 If an evaluator crashed → re-dispatch that evaluator. Do not proceed without complete reports.

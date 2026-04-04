@@ -173,19 +173,53 @@ Proceed to Phase 4. DO NOT PUSH. DO NOT ASK THE USER.
 
 ---
 
-### PHASE 4 — EVAL ⚠️ MANDATORY — NEVER SKIP
+### SMOKE TEST — MANDATORY BEFORE EVAL
 
 **Entry check**: `merged_commit` must be set. If null → STOP, go back to Phase 3.
 
+**Before dispatching ANY evaluator, you MUST verify the app actually starts and loads.**
+This is a hard gate — not optional. If the app crashes on startup, evaluators will waste
+tokens testing a broken app. Fix the build first.
+
+1. Install dependencies: `npm install` (or equivalent)
+2. Start the dev server: `npm run dev` (or equivalent)
+3. Wait for the server to be ready (check the port)
+4. **Verify the app loads** — use chrome-devtools `navigate_page` + `take_screenshot` to
+   confirm the app renders something (not a blank page, not an error overlay, not a crash)
+5. **Check the console** — use `list_console_messages` to check for fatal errors
+
+**═══ SMOKE TEST GATE ═══**
+- [ ] Dev server started without crashing
+- [ ] Browser navigated to the app URL successfully
+- [ ] Screenshot shows actual content (not error overlay, not blank page)
+- [ ] No fatal JavaScript errors in console (warnings are OK, errors are NOT)
+
+**If smoke test FAILS** → The app doesn't start or crashes on load. This is a build
+failure, not an eval failure. DO NOT dispatch evaluators. Instead:
+- Kill the dev server
+- Treat ALL units as failed with feedback: "App crashes on startup: <error details>"
+- **Execute Round Transition** (see the "Round Transition" block below): increment `round`,
+  wipe `changeset_ids`, `merged_commit`, `merge_failures`, `eval_reports`
+- **Check round cap**: if `round >= 3` after incrementing, do NOT re-dispatch.
+  Instead, `dk_push` with "app fails to start after 3 rounds" documented. This matches
+  the Phase 5 RETRY round-3 behavior.
+- Re-dispatch all generators with the crash error as feedback
+- After fix round, re-land, re-run smoke test
+
+**If smoke test PASSES** → Record the server URL. Proceed to Phase 4 (Eval).
+
+---
+
+### PHASE 4 — EVAL ⚠️ MANDATORY — NEVER SKIP
+
+**Entry check**: Smoke test must have PASSED. Dev server must be running.
+
 **⚠️ STOP AND READ THIS: You are about to evaluate. This is NOT optional.**
 **⚠️ dk_verify (Phase 3) is NOT evaluation. It runs lint/type-check/test.**
-**⚠️ Evaluation means: start the app, test with chrome-devtools, score criteria.**
-**⚠️ You CANNOT call dk_push until eval_reports is populated.**
+**⚠️ Evaluation means: test with chrome-devtools, score criteria with evidence.**
+**⚠️ You CANNOT call dk_push until eval_reports is populated with REAL evidence.**
 
-**Before dispatching evaluators**, start the dev server ONCE as the orchestrator:
-1. Install dependencies and run the dev command
-2. Wait for the server to be ready (check the port)
-3. Record the server URL (e.g., `http://localhost:5173`)
+The dev server is already running from the smoke test. Do NOT start another one.
 
 Then dispatch evaluators **sequentially** (one at a time), passing the already-running
 server URL. Evaluators MUST run sequentially because they share a single chrome-devtools
@@ -233,6 +267,8 @@ Before proceeding, verify:
 - [ ] I have an overall/integration eval report
 - [ ] Every acceptance criterion has a numeric score
 - [ ] Every score has evidence (screenshots, console output, HTTP responses)
+- [ ] **At least one screenshot exists in the eval evidence** — if zero screenshots,
+  the evaluator did not actually test the live app. That is a gate failure.
 - [ ] No criterion is unscored
 - [ ] `eval_reports` is populated
 
@@ -410,11 +446,11 @@ Total rounds: {rounds}
 
 - **Generator crashes**: Re-dispatch that single generator. Do not restart the entire build.
 - **dk_merge fails repeatedly**: Skip that changeset, note it in the eval.
-- **Dev server won't start**: Check package.json, run install, check for port conflicts.
-  If still broken after 3 attempts, produce a degraded eval report that explicitly records
-  "live testing skipped — dev server failed to start" for each criterion. The eval report
-  MUST still exist in `eval_reports` with scores (mark untestable criteria as INCONCLUSIVE
-  with reason). You CANNOT skip Phase 4 entirely — a degraded report is mandatory.
+- **Dev server won't start (smoke test fails)**: This is a build failure, not an eval
+  issue. DO NOT produce a "degraded eval report" — that is cheating. Instead: treat all
+  units as failed, enter a fix round with the crash error as feedback, re-dispatch
+  generators to fix the build. The app MUST start and load before eval can proceed.
+  If it still won't start after 3 fix rounds, dk_push with "app fails to start" documented.
 - **All generators fail**: Something is fundamentally wrong with the plan. Re-run the planner
   with "the previous plan produced implementations that all failed to build" and the error logs.
 
@@ -438,6 +474,8 @@ replan_count: 0                       # Number of REPLANs executed (max 1 — su
 ```
 
 **Self-check before dk_push** (run this EVERY time before calling dk_push):
-1. "Is `eval_reports` populated with scores for every criterion? If NO → STOP. Phase 4 incomplete."
-2. "Am I in Phase 5? If NO → STOP. dk_push is only allowed in Phase 5."
+1. "Did the smoke test PASS? Did the app actually start and load? If NO → STOP. Fix the build first."
+2. "Is `eval_reports` populated with scores for every criterion? If NO → STOP. Phase 4 incomplete."
+3. "Do the eval reports contain at least one screenshot? If NO → STOP. The app was never tested live."
+4. "Am I in Phase 5? If NO → STOP. dk_push is only allowed in Phase 5."
 
