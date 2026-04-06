@@ -282,3 +282,29 @@ dk_submit(intent: "Task API with tests")
 ```
 
 Then `dk_verify` runs those tests as part of verification.
+
+## Code Review
+
+Code review runs automatically after every `dk_submit`. Two tiers:
+
+**Local review** (synchronous, included in submit response):
+- Pattern-based checks: security issues, test gaps, convention violations
+- Score returned inline: `review_summary.score` (1-5)
+- Full findings via `dk_review(changeset_id)`
+
+**Deep review** (asynchronous, requires LLM API key):
+- Multi-pass LLM analysis: security, logic, architecture, conventions
+- Notification via `dk_watch`: `changeset.review.completed` event
+- Full findings via `dk_review(changeset_id)`
+
+**Score guide:**
+
+| Score | Meaning | Orchestrator action |
+|-------|---------|---------------------|
+| 5 | No issues | Proceed to approve |
+| 4 | Minor warnings | Proceed, optionally fix |
+| 3 | Test gaps or conventions | Fix if quick, else proceed |
+| 2 | Errors found | Re-dispatch generator |
+| 1 | Security issues | Re-dispatch generator |
+
+**Review is advisory** — it never blocks merge. The orchestrator checks the score and may re-dispatch generators, but proceeds after max 2 review-fix rounds.

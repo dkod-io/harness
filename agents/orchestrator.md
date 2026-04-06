@@ -150,9 +150,28 @@ Before proceeding, verify:
 **Entry check**: `changeset_ids` must be non-empty.
 
 1. **Verify in PARALLEL** — `dk_verify` ALL changesets simultaneously
-2. **Approve** — `dk_approve` each verified changeset
-3. **Merge sequentially** — `dk_merge` each changeset one at a time. Merge order does not
+2. **Review Gate** (advisory, max 2 rounds) — see below
+3. **Approve** — `dk_approve` each verified changeset
+4. **Merge sequentially** — `dk_merge` each changeset one at a time. Merge order does not
    matter — all units are independent.
+
+#### Review Gate (advisory, max 2 rounds)
+
+After dk_verify for each changeset:
+
+1. Call `dk_review(changeset_id)` to get code review results
+2. Check the LOCAL review results:
+   - **Score >= 3 AND no "error" severity findings** → proceed to approve
+   - **Score < 3 OR has "error" severity findings** → re-dispatch generator with review feedback
+3. Re-dispatch payload includes:
+   - Original work unit spec
+   - Review findings (copy the dk_review output verbatim as context)
+   - Instruction: "Fix these code review findings, then re-submit via dk_submit"
+4. After generator re-submits, call dk_review again on the new changeset
+5. **Max 2 review-fix rounds per unit** — after 2 rounds, proceed to approve anyway (advisory)
+6. Track `review_round` separately from eval `round` in state
+
+Do NOT wait for deep review results — deep review runs asynchronously and is informational only. Only act on local review results which are available immediately after submit.
 
 Handle conflicts: `dk_resolve` → retry merge.
 
