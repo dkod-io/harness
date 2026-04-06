@@ -45,7 +45,9 @@ Unit: "Task Management"
   Files: src/api/tasks.ts, src/pages/Tasks.tsx, src/components/TaskCard.tsx, src/hooks/useTaskQuery.ts
 ```
 
-Both units may touch `src/api/index.ts` (to register routes) — different symbols, auto-merged.
+`src/api/index.ts` is an aggregation symbol (route registration) — assign it to exactly one unit
+as the owner. That unit writes the final version with ALL routes pre-included. Other units write
+only their handler implementations in separate files.
 
 **When to use:** Features with low coupling. Each feature is mostly self-contained.
 
