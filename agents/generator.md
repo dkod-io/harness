@@ -130,6 +130,10 @@ Call `dk_submit` with:
 - `intent`: your work unit title
 - Let dkod detect the changes from your overlay
 
+The submit response includes a `review_summary` with the local code review score (1-5) and
+findings count. If the score is low (< 3) or the findings count is high, note it in your
+report — the orchestrator may re-dispatch you with specific review findings to fix.
+
 If submit returns a conflict:
 - Read the conflict details carefully
 - The conflict means another generator modified a symbol you also touched
