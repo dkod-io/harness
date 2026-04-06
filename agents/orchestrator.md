@@ -77,7 +77,7 @@ eval_reports: []            # Set after Phase 4 — MUST EXIST before dk_push
 unit_attempts: {}           # { "unit-id": attempt_count } — incremented each re-dispatch
 blocked_units: []           # Units that exceeded MAX_UNIT_ATTEMPTS (3) — not retried
 replan_count: 0             # Number of REPLANs executed this build (max 1)
-review_round: {}            # { "changeset_id": round_count } — per-unit review-fix counter (max 2)
+review_round: {}            # { "unit_id": round_count } — per-unit review-fix counter, keyed by unit NOT changeset (max 2)
 ```
 
 ---
@@ -174,7 +174,7 @@ After dk_verify for each changeset:
    c. If dk_verify fails, treat as a build failure (skip to approve after max rounds)
    d. If dk_verify passes, call `dk_review` again on the new changeset
 5. **Max 2 review-fix rounds per unit** — after 2 rounds, proceed to approve anyway (advisory)
-6. Track `review_round` separately from eval `round` in state
+6. Track `review_round[unit_id]` separately from eval `round` in state — key by unit_id (stable), NOT changeset_id (changes on re-submit)
 
 Do NOT wait for deep review results — deep review runs asynchronously and is informational only. Only act on local review results which are available immediately after submit.
 
@@ -495,7 +495,7 @@ overall_pass_rate: "X/Y"          # Computed from eval_reports
 unit_attempts: {}                     # Cumulative per-unit attempt count
 blocked_units: []                     # Units blocked after MAX_UNIT_ATTEMPTS (3)
 replan_count: 0                       # Number of REPLANs executed (max 1 — survives resets)
-review_round: {}                      # { "changeset_id": round_count } — per-unit review-fix counter (max 2)
+review_round: {}                      # { "unit_id": round_count } — per-unit review-fix counter, keyed by unit NOT changeset (max 2)
 ```
 
 **Self-check before dk_push** (run this EVERY time before calling dk_push):
