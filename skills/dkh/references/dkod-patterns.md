@@ -302,7 +302,7 @@ Code review runs automatically after every `dk_submit`. Two tiers:
 | Score | Meaning | Orchestrator action |
 |-------|---------|---------------------|
 | 5 | No issues | Proceed to approve |
-| 4 | Minor warnings | Proceed, optionally fix |
+| 4 | Minor warnings | Proceed, optionally fix (unless an "error" severity finding is present — re-dispatch same as score < 3) |
 | 3 | Test gaps or conventions | Fix if quick, else proceed (unless an "error" severity finding is present — re-dispatch same as score < 3) |
 | 2 | Errors found | Re-dispatch generator |
 | 1 | Security issues | Re-dispatch generator |

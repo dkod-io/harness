@@ -169,10 +169,10 @@ After dk_verify for each changeset:
    - Review findings (copy the dk_review output verbatim as context)
    - Instruction: "Fix these code review findings, then re-submit via dk_submit"
 4. After generator re-submits with a new changeset_id:
-   a. **Update `changeset_ids`** — replace the old changeset_id for this unit with the new one
+   a. **Stage** the new changeset_id (do NOT overwrite `changeset_ids` yet — the original verified changeset must remain as fallback)
    b. **Run `dk_verify`** on the new changeset — re-submitted code must pass lint/type-check/tests
-   c. If dk_verify fails, treat as a build failure (skip to approve after max rounds)
-   d. If dk_verify passes, call `dk_review` again on the new changeset
+   c. If dk_verify fails, keep the original changeset_id in `changeset_ids` (skip to approve after max rounds using the last verified changeset)
+   d. If dk_verify passes, **commit** the new changeset_id to `changeset_ids` (replacing the old one) and call `dk_review` again
 5. **Max 2 review-fix rounds per unit** — after 2 rounds, proceed to approve anyway (advisory)
 6. Track `review_round[unit_id]` separately from eval `round` in state — key by unit_id (stable), NOT changeset_id (changes on re-submit)
 
