@@ -77,6 +77,7 @@ eval_reports: []            # Set after Phase 4 — MUST EXIST before dk_push
 unit_attempts: {}           # { "unit-id": attempt_count } — incremented each re-dispatch
 blocked_units: []           # Units that exceeded MAX_UNIT_ATTEMPTS (3) — not retried
 replan_count: 0             # Number of REPLANs executed this build (max 1)
+review_round: {}            # { "unit_id": round_count } — per-unit review-fix counter, keyed by unit NOT changeset (max 2)
 ```
 
 ---
@@ -150,9 +151,33 @@ Before proceeding, verify:
 **Entry check**: `changeset_ids` must be non-empty.
 
 1. **Verify in PARALLEL** — `dk_verify` ALL changesets simultaneously
-2. **Approve** — `dk_approve` each verified changeset
-3. **Merge sequentially** — `dk_merge` each changeset one at a time. Merge order does not
+2. **Review Gate** (advisory, max 2 rounds) — see below
+3. **Approve** — `dk_approve` each verified changeset
+4. **Merge sequentially** — `dk_merge` each changeset one at a time. Merge order does not
    matter — all units are independent.
+
+#### Review Gate (advisory, max 2 rounds)
+
+After dk_verify for each changeset:
+
+1. Call `dk_review(changeset_id)` to get code review results
+2. Check the LOCAL review results (evaluate conditions in order):
+   - **`review_round[unit_id]` >= 2** → max rounds reached, proceed to approve anyway (advisory)
+   - **Score >= 3 AND no "error" severity findings** → proceed to approve
+   - **Score < 3 OR has "error" severity findings** → re-dispatch generator with review feedback
+3. **Increment `review_round[unit_id]`** by 1, then re-dispatch with payload:
+   - Original work unit spec
+   - Review findings (copy the dk_review output verbatim as context)
+   - Instruction: "Fix these code review findings, then re-submit via dk_submit"
+4. After generator re-submits with a new changeset_id:
+   a. **Stage** the new changeset_id (do NOT overwrite `changeset_ids` yet — the original verified changeset must remain as fallback)
+   b. **Run `dk_verify`** on the new changeset — re-submitted code must pass lint/type-check/tests
+   c. If dk_verify fails, keep the original changeset_id in `changeset_ids` (skip to approve after max rounds using the last verified changeset)
+   d. If dk_verify passes, **commit** the new changeset_id to `changeset_ids` (replacing the old one), call `dk_review` again, and **return to step 2** to re-evaluate the score and findings
+5. **Max 2 review-fix rounds per unit** — enforced by the first condition in step 2
+6. Track `review_round[unit_id]` separately from eval `round` in state — key by unit_id (stable), NOT changeset_id (changes on re-submit)
+
+Do NOT wait for deep review results — deep review runs asynchronously and is informational only. Only act on local review results which are available immediately after submit.
 
 Handle conflicts: `dk_resolve` → retry merge.
 
@@ -471,6 +496,7 @@ overall_pass_rate: "X/Y"          # Computed from eval_reports
 unit_attempts: {}                     # Cumulative per-unit attempt count
 blocked_units: []                     # Units blocked after MAX_UNIT_ATTEMPTS (3)
 replan_count: 0                       # Number of REPLANs executed (max 1 — survives resets)
+review_round: {}                      # { "unit_id": round_count } — per-unit review-fix counter, keyed by unit NOT changeset (max 2)
 ```
 
 **Self-check before dk_push** (run this EVERY time before calling dk_push):

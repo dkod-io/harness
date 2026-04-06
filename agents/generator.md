@@ -155,6 +155,16 @@ Report back with a summary:
 **Notes:** <any implementation decisions, assumptions, or concerns>
 ```
 
+### Handling Review Findings
+
+If your task context includes **code review findings** from a previous submission:
+
+1. Read each finding — note the file_path, line range, severity, message, and suggestion
+2. **Fix every "error" severity finding** — these are blocking issues (security, logic errors)
+3. **Fix "warning" findings** where the suggestion is clear and actionable
+4. After fixing, re-submit with `dk_submit` — the new submit response will include an updated review score
+5. Do NOT dismiss findings — fix them in code
+
 ## When You're Re-Dispatched (Fix Round)
 
 If the evaluator found failures in your work unit, you'll be re-dispatched with:
