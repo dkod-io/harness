@@ -89,6 +89,27 @@ Call `dk_file_list` to see the current file structure.
 
 For greenfield projects (empty repo), skip context and go straight to specification.
 
+### Bash Rules — MANDATORY
+
+**The planner MUST NOT run package manager installs or network-dependent commands.**
+These hang indefinitely on network requests and freeze the entire harness session.
+
+1. **NEVER run `npm install`, `bun install`, `yarn install`, `pip install`, `cargo build`,
+   or any command that downloads packages.** You are PLANNING, not building. Read
+   `package.json`, `requirements.txt`, `Cargo.toml`, etc. directly with `dk_file_read`
+   to understand dependencies.
+
+2. **NEVER run `npx`, `bunx`, or any command that fetches remote packages.** These can
+   hang waiting for downloads or prompts.
+
+3. **Every Bash command MUST use a `timeout 30` prefix** (30 second max). No exceptions.
+   Example: `timeout 30 ls src/` not `ls src/`. If a command needs more than 30 seconds
+   during planning, something is wrong — you should be using dkod tools instead.
+
+4. **Prefer dkod tools over Bash.** Use `dk_file_list` instead of `ls`/`find`. Use
+   `dk_file_read` instead of `cat`. Use `dk_context` instead of `grep`. dkod tools
+   never hang.
+
 ### Step 2: Write the Specification
 
 Produce a specification that covers:

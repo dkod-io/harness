@@ -202,3 +202,8 @@ In this case:
 7. **Batch reads, check writes.** Read all files upfront. When writing, check each
    `dk_file_write` response for `conflict_warnings` before writing the next file.
    If a conflict warning appears, stop and adapt immediately — don't continue writing.
+8. **No package installs or remote fetches.** NEVER run `npm install`, `bun install`,
+   `pip install`, `npx`, `bunx`, or any command that downloads packages or fetches
+   remote resources. These hang indefinitely and freeze the session. You write code
+   via dkod — the orchestrator handles dependency installation during the smoke test.
+   If you must run Bash, always prefix with `timeout 30`.
