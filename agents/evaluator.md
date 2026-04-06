@@ -479,8 +479,9 @@ Output a structured report:
 ## Failed Criteria Summary
 <List of all failed criteria with their fix hints, grouped by work unit>
 
-## Verification Results
+## Verification & Review Results
 <dk_verify output summary — lint issues, type errors, test failures>
+<dk_review output — score (1-5), error/warning findings and how they were handled>
 ```
 
 ## Rules

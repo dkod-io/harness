@@ -156,6 +156,7 @@ Report back with a summary:
 **Files modified:** <list>
 **Files created:** <list>
 **Symbols implemented:** <list>
+**Review score:** <from dk_submit review_summary — score 1-5, findings count>
 **Notes:** <any implementation decisions, assumptions, or concerns>
 ```
 

@@ -270,9 +270,10 @@ If a generator crashed → re-dispatch it. Do not proceed until all have submitt
 
 ### Phase 3: Land
 1. **Verify in parallel**: `dk_verify` ALL changesets simultaneously
-2. **Approve all verified**: `dk_approve` each
-3. **Merge sequentially**: `dk_merge` each one at a time
-4. Handle conflicts: `dk_resolve` → retry
+2. **Review each changeset**: `dk_review` each — if score < 3 or error findings, re-dispatch the generator with findings before proceeding
+3. **Approve all reviewed**: `dk_approve` each changeset that passed review
+4. **Merge sequentially**: `dk_merge` each one at a time
+5. Handle conflicts: `dk_resolve` → retry
 
 **DO NOT dk_push. Shipping is Phase 5 only.**
 
