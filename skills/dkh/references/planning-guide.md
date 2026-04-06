@@ -45,7 +45,9 @@ Unit: "Task Management"
   Files: src/api/tasks.ts, src/pages/Tasks.tsx, src/components/TaskCard.tsx, src/hooks/useTaskQuery.ts
 ```
 
-Both units may touch `src/api/index.ts` (to register routes) — different symbols, auto-merged.
+`src/api/index.ts` is an aggregation symbol (route registration) — assign it to exactly one unit
+as the owner. That unit writes the final version with ALL routes pre-included. Other units write
+only their handler implementations in separate files.
 
 **When to use:** Features with low coupling. Each feature is mostly self-contained.
 
@@ -80,7 +82,7 @@ With dkod's AST-level merging, almost nothing that feels like a dependency actua
 | Two units edit the same file | dkod merges at the symbol level — different functions in the same file auto-merge |
 | Unit B imports a type that Unit A defines | Each generator inlines its own types. No waiting. |
 | Both units add to `package.json` | dkod merges JSON at the key level — additions from both units coexist |
-| Both units add routes to a router | dkod deduplicates and merges route registrations |
+| Both units add routes to a router | Router files are aggregation symbols — assign a single owner who writes the final version with ALL routes. Other units write only handler implementations. |
 | Unit B needs scaffolding that Unit A creates | Scaffolding runs in parallel. dkod merges the scaffolding output with feature code. |
 | Both units create test files for different modules | Completely independent — no conflict possible |
 | Unit B renders a component that Unit A creates | Unit B inlines a stub or its own version. The merge pass reconciles. |
@@ -178,3 +180,39 @@ pattern:
 
 This prevents the "but that's not what I meant" problem. Both sides agree on what "done"
 means before any code is written.
+
+## Aggregation Symbol Pattern
+
+Entry points are the most common source of true conflicts in parallel builds. Every
+generator that adds a feature wants to register it in the entry point — but only one
+generator can own that symbol.
+
+### The Pattern
+
+1. **Identify all aggregation symbols** — functions/components that wire the app together
+2. **Assign each to exactly one unit** (usually scaffolding)
+3. **The owner writes the FINAL version** with all imports pre-included
+4. **Other units write only their implementations** in separate files
+
+### Example: Tauri App
+
+**Wrong (causes 5 conflicts):**
+- WU-01 writes `lib.rs::run()` with its own commands
+- WU-02 writes `lib.rs::run()` to add dkod commands → CONFLICT
+- WU-03 writes `lib.rs::run()` to add repo commands → CONFLICT
+
+**Right (zero conflicts):**
+- WU-01 owns `lib.rs::run()` and writes it with ALL commands registered:
+  `commands::dkod_connect, commands::repo_list, commands::file_open, ...`
+- WU-02 writes `src/commands/dkod.rs` (its own file, no conflict)
+- WU-03 writes `src/commands/repo.rs` (its own file, no conflict)
+
+### Example: React App
+
+**Wrong:**
+- WU-01 writes `App.tsx` with layout shell
+- WU-05 writes `App.tsx` to add routes → CONFLICT
+
+**Right:**
+- WU-01 owns `App.tsx` and writes it with ALL routes pre-imported
+- WU-05 writes `src/pages/Dashboard.tsx` (its own file, no conflict)

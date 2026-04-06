@@ -105,6 +105,9 @@ Before proceeding, verify:
 - [ ] Overall acceptance criteria exist
 - [ ] **No duplicate symbol ownership.** No two units may OWNS the same symbol. If found,
   REJECT. Tell the planner which symbols have multiple owners.
+- [ ] **Aggregation symbols identified with single owners.** Entry points that wire the app
+  together (e.g., `run()`, `App.tsx`, `mod.rs`, `index.ts`, `router.ts`) must be listed in
+  the plan's Aggregation Symbols table with exactly one owner each. If missing, REJECT.
 - [ ] Design direction established for any UI work
 
 **If gate fails** → re-run planner with specific feedback, up to **3 attempts**. If Gate 1
