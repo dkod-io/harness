@@ -443,3 +443,4 @@ The Planner produces work units in this structure (embedded in the plan artifact
 - `references/planning-guide.md` — deep guide for symbol-level decomposition
 - `references/evaluation-guide.md` — skeptical evaluation techniques and chrome-devtools patterns
 - `references/dkod-patterns.md` — dkod session lifecycle and merge patterns
+
