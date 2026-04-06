@@ -161,7 +161,8 @@ Before proceeding, verify:
 After dk_verify for each changeset:
 
 1. Call `dk_review(changeset_id)` to get code review results
-2. Check the LOCAL review results:
+2. Check the LOCAL review results (evaluate conditions in order):
+   - **`review_round[unit_id]` >= 2** → max rounds reached, proceed to approve anyway (advisory)
    - **Score >= 3 AND no "error" severity findings** → proceed to approve
    - **Score < 3 OR has "error" severity findings** → re-dispatch generator with review feedback
 3. **Increment `review_round[unit_id]`** by 1, then re-dispatch with payload:
@@ -173,7 +174,7 @@ After dk_verify for each changeset:
    b. **Run `dk_verify`** on the new changeset — re-submitted code must pass lint/type-check/tests
    c. If dk_verify fails, keep the original changeset_id in `changeset_ids` (skip to approve after max rounds using the last verified changeset)
    d. If dk_verify passes, **commit** the new changeset_id to `changeset_ids` (replacing the old one), call `dk_review` again, and **return to step 2** to re-evaluate the score and findings
-5. **Max 2 review-fix rounds per unit** — after 2 rounds, proceed to approve anyway (advisory)
+5. **Max 2 review-fix rounds per unit** — enforced by the first condition in step 2
 6. Track `review_round[unit_id]` separately from eval `round` in state — key by unit_id (stable), NOT changeset_id (changes on re-submit)
 
 Do NOT wait for deep review results — deep review runs asynchronously and is informational only. Only act on local review results which are available immediately after submit.
