@@ -82,7 +82,7 @@ With dkod's AST-level merging, almost nothing that feels like a dependency actua
 | Two units edit the same file | dkod merges at the symbol level — different functions in the same file auto-merge |
 | Unit B imports a type that Unit A defines | Each generator inlines its own types. No waiting. |
 | Both units add to `package.json` | dkod merges JSON at the key level — additions from both units coexist |
-| Both units add routes to a router | dkod deduplicates and merges route registrations |
+| Both units add routes to a router | Router files are aggregation symbols — assign a single owner who writes the final version with ALL routes. Other units write only handler implementations. |
 | Unit B needs scaffolding that Unit A creates | Scaffolding runs in parallel. dkod merges the scaffolding output with feature code. |
 | Both units create test files for different modules | Completely independent — no conflict possible |
 | Unit B renders a component that Unit A creates | Unit B inlines a stub or its own version. The merge pass reconciles. |
