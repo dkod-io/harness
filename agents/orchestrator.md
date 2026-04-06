@@ -77,6 +77,7 @@ eval_reports: []            # Set after Phase 4 — MUST EXIST before dk_push
 unit_attempts: {}           # { "unit-id": attempt_count } — incremented each re-dispatch
 blocked_units: []           # Units that exceeded MAX_UNIT_ATTEMPTS (3) — not retried
 replan_count: 0             # Number of REPLANs executed this build (max 1)
+review_round: {}            # { "changeset_id": round_count } — per-unit review-fix counter (max 2)
 ```
 
 ---
@@ -167,7 +168,11 @@ After dk_verify for each changeset:
    - Original work unit spec
    - Review findings (copy the dk_review output verbatim as context)
    - Instruction: "Fix these code review findings, then re-submit via dk_submit"
-4. After generator re-submits, call dk_review again on the new changeset
+4. After generator re-submits with a new changeset_id:
+   a. **Update `changeset_ids`** — replace the old changeset_id for this unit with the new one
+   b. **Run `dk_verify`** on the new changeset — re-submitted code must pass lint/type-check/tests
+   c. If dk_verify fails, treat as a build failure (skip to approve after max rounds)
+   d. If dk_verify passes, call `dk_review` again on the new changeset
 5. **Max 2 review-fix rounds per unit** — after 2 rounds, proceed to approve anyway (advisory)
 6. Track `review_round` separately from eval `round` in state
 
@@ -490,6 +495,7 @@ overall_pass_rate: "X/Y"          # Computed from eval_reports
 unit_attempts: {}                     # Cumulative per-unit attempt count
 blocked_units: []                     # Units blocked after MAX_UNIT_ATTEMPTS (3)
 replan_count: 0                       # Number of REPLANs executed (max 1 — survives resets)
+review_round: {}                      # { "changeset_id": round_count } — per-unit review-fix counter (max 2)
 ```
 
 **Self-check before dk_push** (run this EVERY time before calling dk_push):
