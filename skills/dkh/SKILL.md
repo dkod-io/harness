@@ -38,7 +38,7 @@ because dkod's AST-level merge eliminates false conflicts.
 Before starting, verify these are available:
 
 1. **dkod MCP tools**: `dk_connect`, `dk_context`, `dk_file_write`, `dk_submit`, `dk_verify`,
-   `dk_approve`, `dk_merge`, `dk_push`, `dk_status`
+   `dk_review`, `dk_approve`, `dk_merge`, `dk_push`, `dk_status`, `dk_watch`
 2. **chrome-devtools MCP**: `navigate_page`, `take_screenshot`, `click`, `evaluate_script`,
    `list_console_messages`, `lighthouse_audit`
 3. **frontend-design skill**: Required for any project with UI. Generators MUST invoke
@@ -104,7 +104,8 @@ USER PROMPT
 │  ✓ Specification with stack, features, data model   │
 │  ✓ Work units with symbols + acceptance criteria    │
 │  ✓ No duplicate symbol ownership                    │
-│  BLOCKED until all three exist.                     │
+│  ✓ Aggregation symbols identified with single owners│
+│  BLOCKED until all four exist.                      │
 └────────────────────┬────────────────────────────────┘
                      │
                      ▼
@@ -122,9 +123,10 @@ USER PROMPT
 │  BLOCKED until all generators have submitted.       │
 ├─────────────────────────────────────────────────────┤
 │  PHASE 3: LAND                                      │
-│  Orchestrator merges all changesets                  │
+│  Orchestrator lands all changesets per-changeset     │
 │  • dk_verify ALL changesets in PARALLEL              │
-│  • dk_approve each verified changeset               │
+│  • dk_review each — score < 3 or errors? fix first  │
+│  • dk_approve each reviewed changeset               │
 │  • dk_merge each sequentially                       │
 │                                                     │
 │  ⚠️  DO NOT dk_push after landing!                  │
@@ -268,9 +270,10 @@ If a generator crashed → re-dispatch it. Do not proceed until all have submitt
 
 ### Phase 3: Land
 1. **Verify in parallel**: `dk_verify` ALL changesets simultaneously
-2. **Approve all verified**: `dk_approve` each
-3. **Merge sequentially**: `dk_merge` each one at a time
-4. Handle conflicts: `dk_resolve` → retry
+2. **Review each changeset**: `dk_review` each — if score < 3 or error findings, re-dispatch the generator with findings before proceeding
+3. **Approve all reviewed**: `dk_approve` each changeset that passed review
+4. **Merge sequentially**: `dk_merge` each one at a time
+5. Handle conflicts: `dk_resolve` → retry
 
 **DO NOT dk_push. Shipping is Phase 5 only.**
 

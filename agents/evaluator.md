@@ -80,7 +80,7 @@ Use `dk_context` to check symbol relationships:
 - Are types consistent across modules?
 - Are exports matching what consumers import?
 
-### Step 3: Run Verification
+### Step 3: Run Verification and Review
 
 Call `dk_verify` to run the automated pipeline:
 - Lint checks
@@ -89,6 +89,11 @@ Call `dk_verify` to run the automated pipeline:
 - Semantic analysis
 
 Record the results. Any verification failure is an automatic criterion failure.
+
+Call `dk_review` to check code review findings:
+- If the review score is < 3 or there are "error" severity findings, record them as evidence
+- Unresolved review findings (security issues, logic errors) are criterion failures
+- Review findings with "warning" severity are informational — note them but don't auto-fail
 
 ### Step 4: Start the Application (conditional)
 
@@ -474,8 +479,9 @@ Output a structured report:
 ## Failed Criteria Summary
 <List of all failed criteria with their fix hints, grouped by work unit>
 
-## Verification Results
+## Verification & Review Results
 <dk_verify output summary — lint issues, type errors, test failures>
+<dk_review output — score (1-5), error/warning findings and how they were handled>
 ```
 
 ## Rules
