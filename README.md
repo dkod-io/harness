@@ -107,15 +107,15 @@ That's it. The harness does the rest.
 harness/
 ├── skills/dkh/
 │   ├── SKILL.md                    # Core harness behavior and autonomous loop
+│   ├── agents/
+│   │   ├── orchestrator.md         # Drives the full autonomous pipeline
+│   │   ├── planner.md              # Prompt → spec → parallel work units
+│   │   ├── generator.md            # Implements one work unit per dkod session
+│   │   └── evaluator.md            # Adversarial testing via chrome-devtools
 │   └── references/
 │       ├── planning-guide.md       # Symbol-level decomposition patterns
 │       ├── evaluation-guide.md     # Chrome DevTools testing + scoring calibration
 │       └── dkod-patterns.md        # Session lifecycle and merge strategies
-├── agents/
-│   ├── orchestrator.md             # Drives the full autonomous pipeline
-│   ├── planner.md                  # Prompt → spec → parallel work units
-│   ├── generator.md                # Implements one work unit per dkod session
-│   └── evaluator.md                # Adversarial testing via chrome-devtools
 ├── commands/
 │   ├── plan.md                     # /dkh:plan — planning only
 │   ├── eval.md                     # /dkh:eval — evaluation only
