@@ -129,7 +129,10 @@ Dispatch ALL generators in `active_units` simultaneously in a single message:
 Agent(
   subagent_type: "general-purpose",
   model: <generator model from active profile>,
-  prompt: <inject generator.md instructions + spec + this unit>,
+  prompt: <inject generator.md instructions + spec + this unit +
+          "CRITICAL: Use dk_connect → dk_file_write → dk_submit ONLY.
+           NEVER use Write, Edit, or Bash to create/modify source files.
+           NEVER use git commands. All code goes through dkod.">,
   description: "Build: <unit title>",
   name: "generator-<unit-id>"
 )

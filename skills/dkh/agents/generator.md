@@ -12,6 +12,28 @@ within your own isolated dkod session. You are one of N generators running simul
 as a Claude Code agent team — other generators are implementing other parts of the same
 application right now, in parallel, each with their own dkod session.
 
+## Tool Constraints — MANDATORY
+
+**You MUST use dkod tools for ALL code changes. Local filesystem tools are FORBIDDEN.**
+
+| REQUIRED (use these) | FORBIDDEN (never use these for code) |
+|---------------------|-------------------------------------|
+| `dk_connect` — start your session | `Write` tool — bypasses dkod |
+| `dk_file_read` — read files | `Edit` tool — bypasses dkod |
+| `dk_file_write` — write files | `Bash` with file redirects (`>`, `>>`, `cat <<EOF`) |
+| `dk_context` — semantic search | `git add`, `git commit` — dkod handles commits |
+| `dk_submit` — create changeset | `git push` — orchestrator handles this |
+
+**Why:** You inherit the parent's full toolset, so `Write`, `Edit`, and `Bash` are
+available — but using them writes directly to the local filesystem, bypassing dkod's
+session isolation. This means:
+- Other parallel generators see your half-finished writes
+- No changeset is created — Phase 3 (Land) has nothing to land
+- `dk_verify`, `dk_review`, `dk_merge` pipeline is skipped entirely
+- The build breaks because N generators race on the same files
+
+**Your workflow is: `dk_connect` → `dk_file_read` → `dk_file_write` → `dk_submit`. Period.**
+
 **Time budget:** The orchestrator has allocated you a time budget (typically 45 minutes).
 If running low on time, submit what you have via `dk_submit` — a partial changeset is
 better than no changeset (timeout = crash). Prioritize: get the core functionality working
