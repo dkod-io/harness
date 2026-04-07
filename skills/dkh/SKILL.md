@@ -118,16 +118,22 @@ USER PROMPT
 │  • dk_context (understand target symbols)           │
 │  • dk_file_read → dk_file_write (check warnings!)   │
 │  • dk_submit (changeset)                            │
+│  • REVIEW-FIX LOOP (max 3 rounds):                  │
+│    - Fix local review findings (inline w/ submit)   │
+│    - dk_watch for deep review completion            │
+│    - dk_review → fix deep findings → re-submit      │
+│    - Exit when score ≥ 4 or 3 rounds exhausted     │
 │                                                     │
 │  GATE 2 — Required output:                          │
-│  ✓ Every generator reported with a changeset_id     │
-│  BLOCKED until all generators have submitted.       │
+│  ✓ Every generator exited with changeset_id +       │
+│    final review score                               │
+│  BLOCKED until all generators have completed.       │
 ├─────────────────────────────────────────────────────┤
 │  PHASE 3: LAND                                      │
-│  Orchestrator lands all changesets per-changeset     │
+│  Orchestrator has changeset_ids from generator exits │
+│  • Log any generators with score < 3 (warn only)   │
 │  • dk_verify ALL changesets in PARALLEL              │
-│  • dk_review each — score < 3 or errors? fix first  │
-│  • dk_approve each reviewed changeset               │
+│  • dk_approve ALL verified changesets               │
 │  • dk_merge each sequentially                       │
 │                                                     │
 │  ⚠️  DO NOT dk_push after landing!                  │
@@ -261,18 +267,29 @@ If any check fails → re-run the planner with specific feedback. Do not proceed
 **GATE 1 ENTRY CHECK**: "Do I have a validated plan? YES → proceed."
 
 1. Dispatch ALL generators simultaneously (one Agent call per unit)
-2. Wait for all generators to complete
+2. Each generator implements its unit, submits, then runs a **review-fix loop**:
+   - Fix local review findings (returned inline with `dk_submit` response)
+   - Wait for deep review via `dk_watch` (filter: `changeset.review.completed`)
+   - Fetch findings via `dk_review(changeset_id)`
+   - If score < 4 OR any `severity:"error"` findings → fix files → `dk_submit` again
+   - Max **3 review-fix rounds**, then exit regardless of score
+   - `dk_watch` blocks at tool level — zero LLM inference while waiting
+3. Wait for all generators to complete and return their final state
 
 **GATE 2 CHECK:**
-- [ ] Every generator reported back with a changeset_id
+- [ ] Every generator exited with a changeset_id and final review score
 - [ ] All changeset_ids collected
+- [ ] Log any generators that exhausted 3 rounds with score < 3 (warning only, don't block)
 
-If a generator crashed → re-dispatch it. Do not proceed until all have submitted.
+If a generator crashed → re-dispatch it. Do not proceed until all have completed.
 
 ### Phase 3: Land
-1. **Verify in parallel**: `dk_verify` ALL changesets simultaneously
-2. **Review each changeset**: `dk_review` each — if score < 3 or error findings, re-dispatch the generator with findings before proceeding
-3. **Approve all reviewed**: `dk_approve` each changeset that passed review
+Generators already handled review-fix loops. Orchestrator has changeset_ids from their exits.
+No session-to-changeset mapping needed. No review score checking needed.
+
+1. **Check generator exit states**: Log any generators that exhausted 3 rounds with low scores (warning only)
+2. **Verify in parallel**: `dk_verify` ALL changesets simultaneously
+3. **Approve all verified**: `dk_approve` each
 4. **Merge sequentially**: `dk_merge` each one at a time
 5. Handle conflicts: `dk_resolve` → retry
 
