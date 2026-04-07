@@ -88,7 +88,7 @@ review_round: {}            # { "unit_id": round_count } — per-unit review-fix
 
 ```
 dk_connect(
-  repo: "<owner/repo>",
+  codebase: "<owner/repo>",
   agent_name: "preflight",
   intent: "Verify dkod connection before starting harness"
 )
