@@ -242,7 +242,7 @@ files one by one — that wastes 100+ tool calls and can exceed turn limits.
    `dk_push(mode: "branch", branch_name: "dkh/sync-<repo-name>")`
    This is NOT a PR — just a sync branch for local checkout.
 2. Fetch and checkout locally:
-   `git fetch origin && git checkout dkh/sync-<repo-name>`
+   `git fetch origin && git checkout -B dkh/sync-<repo-name> origin/dkh/sync-<repo-name>`
 3. Verify the checkout succeeded (files exist on disk)
 
 The temp branch `dkh/sync-*` is cleaned up in Phase 5 after the final PR push.
@@ -398,8 +398,8 @@ If the PR description doesn't include eval results → you skipped Phase 4.
 **Sync branch cleanup** (after `dk_push(mode: "pr")` on PASS or round-3 RETRY):
 ```
 git push origin --delete dkh/sync-<repo-name>
-git branch -d dkh/sync-<repo-name>
 git checkout main
+git branch -d dkh/sync-<repo-name>
 ```
 
 ---

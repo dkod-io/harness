@@ -152,7 +152,7 @@ USER PROMPT
 │  FILE SYNC — get merged code locally                 │
 │                                                     │
 │  dk_push(mode:"branch", branch_name:"dkh/sync-<repo>")  │
-│  Then: git fetch && git checkout dkh/sync-<repo>    │
+│  Then: git fetch && git checkout -B dkh/sync-<repo>  │
 │  This is a temp branch — NOT a PR.                  │
 │  Cleanup happens in Phase 5.                        │
 │                                                     │
@@ -326,7 +326,7 @@ testing and evaluation. **Do NOT use dk_file_read** to sync files one by one —
    `dk_push(mode: "branch", branch_name: "dkh/sync-<repo-name>")`
    This is NOT a PR — just a sync branch for local checkout.
 2. Fetch and checkout locally:
-   `git fetch origin && git checkout dkh/sync-<repo-name>`
+   `git fetch origin && git checkout -B dkh/sync-<repo-name> origin/dkh/sync-<repo-name>`
 3. Verify the checkout succeeded (files exist on disk)
 
 The temp branch `dkh/sync-*` is cleaned up in Phase 5 after the final PR push.
@@ -388,8 +388,8 @@ Read the evaluator's **verdict**:
 **Temp branch cleanup:** After `dk_push(mode: "pr")` completes, delete the sync branch:
 ```
 git push origin --delete dkh/sync-<repo-name>
-git branch -d dkh/sync-<repo-name>
 git checkout main
+git branch -d dkh/sync-<repo-name>
 ```
 This keeps the remote clean — only the PR branch remains.
 
