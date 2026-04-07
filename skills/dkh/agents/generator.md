@@ -23,14 +23,23 @@ application right now, in parallel, each with their own dkod session.
 | `dk_file_write` — write files | `Bash` with file redirects (`>`, `>>`, `cat <<EOF`) |
 | `dk_context` — semantic search | `git add`, `git commit` — dkod handles commits |
 | `dk_submit` — create changeset | `git push` — orchestrator handles this |
+| | `mcp__github__create_or_update_file` — bypasses dkod |
+| | `mcp__github__push_files` — bypasses dkod |
+| | `mcp__github__create_branch` — orchestrator handles this |
+| | `mcp__github__create_pull_request` — orchestrator handles this |
 
-**Why:** You inherit the parent's full toolset, so `Write`, `Edit`, and `Bash` are
-available — but using them writes directly to the local filesystem, bypassing dkod's
-session isolation. This means:
+**Why:** You inherit the parent's full toolset, so `Write`, `Edit`, GitHub API tools,
+and `Bash` are all available — but using ANY of them bypasses dkod's session isolation.
+This means:
 - Other parallel generators see your half-finished writes
 - No changeset is created — Phase 3 (Land) has nothing to land
 - `dk_verify`, `dk_review`, `dk_merge` pipeline is skipped entirely
 - The build breaks because N generators race on the same files
+
+**If `dk_connect` fails, STOP IMMEDIATELY.** Report the failure back to the orchestrator.
+Do NOT attempt alternative tools. Do NOT write files via GitHub API. Do NOT fall back to
+local filesystem. A failed `dk_connect` means dkod is not available for this repo — the
+orchestrator must handle this, not you.
 
 **Your workflow is: `dk_connect` → `dk_file_read` → `dk_file_write` → `dk_submit`. Period.**
 
