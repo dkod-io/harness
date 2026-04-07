@@ -2,8 +2,9 @@
 name: dkh:generator
 description: >
   Implements a single work unit from the harness plan via an isolated dkod session. Receives
-  a spec, a work unit, and acceptance criteria. Writes code, submits the changeset, and reports
-  completion. Does not merge — the orchestrator handles landing.
+  a spec, a work unit, and acceptance criteria. Writes code, submits the changeset, then runs
+  a review-fix loop (up to 3 rounds) handling both local and deep code review findings before
+  reporting completion. Does not merge — the orchestrator handles landing.
 maxTurns: 80
 ---
 
@@ -155,51 +156,66 @@ Before submitting, verify your own work:
 This is NOT a replacement for the evaluator. But catching your own obvious mistakes saves a
 round trip.
 
-### Step 5: Submit
+### Step 5: Submit and Review-Fix Loop
 
-Call `dk_submit` with:
-- `intent`: your work unit title
-- Let dkod detect the changes from your overlay
+Call `dk_submit` with your work unit title as `intent`. This is **round 1**.
 
-The submit response includes a `review_summary` with the local code review score (1-5) and
-findings count. If the score is low (< 3) or the findings count is high, note it in your
-report — the orchestrator may re-dispatch you with specific review findings to fix.
+The submit response includes `review_summary` with a local code review score (1-5) and
+findings. You now own the review-fix lifecycle — do NOT just report the score and exit.
 
-If submit returns a conflict:
-- Read the conflict details carefully
-- The conflict means another generator modified a symbol you also touched
-- This shouldn't happen if the planner decomposed well, but if it does:
-  - Read the other agent's version with `dk_file_read` (after the conflict is surfaced)
-  - Adjust your code to work alongside theirs
-  - Re-submit
+**Run the review-fix loop (max 3 rounds):**
+
+```
+round = 1   (the dk_submit you just did)
+
+LOOP while round ≤ 3:
+
+  # Check LOCAL review (inline with dk_submit response)
+  if local review has severity:"error" findings:
+    fix the files → dk_submit again → round += 1
+    if round > 3 → break
+    continue  (re-check local on the new submission)
+
+  # Local is clean — wait for DEEP review
+  dk_watch(filter: "changeset.review.completed")  — blocks until done
+  dk_review(changeset_id) → get deep findings + score
+
+  if score ≥ 4 AND no severity:"error" findings:
+    break  (changeset is clean)
+
+  # Deep found issues — fix and re-submit
+  fix files based on deep findings
+  dk_submit(intent) → round += 1
+  if round > 3 → break
+  # loop continues — re-check local before waiting for deep again
+```
+
+**Handling findings:**
+- Fix every `severity:"error"` finding — these are blocking (security, logic errors)
+- Fix `severity:"warning"` findings where the suggestion is clear and actionable
+- Do NOT dismiss findings — fix them in code
+
+**If submit returns a conflict** (another generator modified a symbol you touched):
+- Read their version from the conflict details
+- Adjust your code to work alongside theirs
+- Re-submit (counts as a round)
 
 ### Step 6: Report
 
-After successful submission, your task is done. The orchestrator will handle verification,
-approval, merging, and evaluation.
+After the review-fix loop exits (clean score or 3 rounds exhausted), report:
 
-Report back with a summary:
 ```
 ## Generator Report: <unit title>
 
 **Status:** submitted
 **Changeset ID:** <from dk_submit response>
+**Final review score:** <score after last round>
+**Rounds used:** <1-3>
 **Files modified:** <list>
 **Files created:** <list>
 **Symbols implemented:** <list>
-**Review score:** <from dk_submit review_summary — score 1-5, findings count>
 **Notes:** <any implementation decisions, assumptions, or concerns>
 ```
-
-### Handling Review Findings
-
-If your task context includes **code review findings** from a previous submission:
-
-1. Read each finding — note the file_path, line range, severity, message, and suggestion
-2. **Fix every "error" severity finding** — these are blocking issues (security, logic errors)
-3. **Fix "warning" findings** where the suggestion is clear and actionable
-4. After fixing, re-submit with `dk_submit` — the new submit response will include an updated review score
-5. Do NOT dismiss findings — fix them in code
 
 ## When You're Re-Dispatched (Fix Round)
 
