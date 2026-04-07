@@ -172,8 +172,10 @@ LOOP while round ≤ 3:
 
   # Check LOCAL review (inline with dk_submit response)
   if local review has severity:"error" findings:
-    fix the files → dk_submit again → round += 1
+    fix the files
+    round += 1
     if round > 3 → break
+    dk_submit again
     continue  (re-check local on the new submission)
 
   # Local is clean — wait for DEEP review
@@ -185,8 +187,9 @@ LOOP while round ≤ 3:
 
   # Deep found issues — fix and re-submit
   fix files based on deep findings
-  dk_submit(intent) → round += 1
+  round += 1
   if round > 3 → break
+  dk_submit(intent)
   # loop continues — re-check local before waiting for deep again
 ```
 
