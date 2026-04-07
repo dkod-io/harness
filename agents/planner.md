@@ -351,6 +351,23 @@ All units dispatch simultaneously: [Unit 1, Unit 2, Unit 3, Unit 4, Unit 5, Unit
 ...
 ```
 
+## Pre-Output Self-Check (Gate 1)
+
+Before finalizing your plan, verify ALL of these. The orchestrator will reject your plan
+if any check fails — save a round trip by catching it yourself:
+
+- [ ] Specification includes stack, features, and data model
+- [ ] Every work unit has `OWNS (exclusive)` with specific symbol names
+- [ ] No two units own the same symbol (check for duplicates across all OWNS lists)
+- [ ] Aggregation symbols table exists — entry points (App, router, main, index) each
+  have exactly one owner
+- [ ] Every work unit has 5+ testable acceptance criteria
+- [ ] Overall acceptance criteria exist (app starts, no console errors, responsive, etc.)
+- [ ] **For UI projects**: Design Direction section exists with specific tone (not "modern
+  and clean"), hex color values, and named font choices (not Arial/Inter/Roboto)
+
+If any check fails, fix the plan before outputting it.
+
 ## Rules
 
 1. **All units dispatch simultaneously. There are no waves, no dependencies.** Every unit
