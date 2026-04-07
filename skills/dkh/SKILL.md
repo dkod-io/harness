@@ -151,7 +151,7 @@ USER PROMPT
 ┌─────────────────────────────────────────────────────┐
 │  FILE SYNC — get merged code locally                 │
 │                                                     │
-│  dk_push(mode:"branch", branch:"dkh/sync-<repo>")  │
+│  dk_push(mode:"branch", branch_name:"dkh/sync-<repo>")  │
 │  Then: git fetch && git checkout dkh/sync-<repo>    │
 │  This is a temp branch — NOT a PR.                  │
 │  Cleanup happens in Phase 5.                        │
@@ -235,7 +235,7 @@ USER PROMPT
    live application against acceptance criteria via chrome-devtools.
 
 6. **dk_push(mode:"pr") is ONLY allowed in Phase 5.** Not after Phase 3. Not "just to save
-   progress." The one exception: `dk_push(mode:"branch", branch:"dkh/sync-*")` is required
+   progress." The one exception: `dk_push(mode:"branch", branch_name:"dkh/sync-*")` is required
    after landing to sync merged code locally for the smoke test. This is a temp branch, not
    a PR — it gets cleaned up in Phase 5. If you catch yourself calling `dk_push(mode:"pr")`
    before `eval_reports` is populated, STOP. `dk_merge` commits code to the dkod session

@@ -231,16 +231,30 @@ Proceed to Phase 4. DO NOT PUSH. DO NOT ASK THE USER.
 
 ---
 
-### SMOKE TEST — MANDATORY BEFORE EVAL
+### FILE SYNC — Get Merged Code Locally
 
 **Entry check**: `merged_commit` must be set. If null → STOP, go back to Phase 3.
+
+Sync the merged code to the local filesystem. **Do NOT use `dk_file_read`** to sync
+files one by one — that wastes 100+ tool calls and can exceed turn limits.
+
+1. Push merged code to a temporary branch:
+   `dk_push(mode: "branch", branch_name: "dkh/sync-<repo-name>")`
+   This is NOT a PR — just a sync branch for local checkout.
+2. Fetch and checkout locally:
+   `git fetch origin && git checkout dkh/sync-<repo-name>`
+3. Verify the checkout succeeded (files exist on disk)
+
+The temp branch `dkh/sync-*` is cleaned up in Phase 5 after the final PR push.
+
+### SMOKE TEST — MANDATORY BEFORE EVAL
 
 **Before dispatching ANY evaluator, you MUST verify the app actually starts and loads.**
 This is a hard gate — not optional. If the app crashes on startup, evaluators will waste
 tokens testing a broken app. Fix the build first.
 
-1. Install dependencies: `npm install` (or equivalent)
-2. Start the dev server: `npm run dev` (or equivalent)
+1. Install dependencies: `bun install`
+2. Start the dev server: `bun run dev`
 3. Wait for the server to be ready (check the port)
 4. **Verify the app loads** — use chrome-devtools `navigate_page` + `take_screenshot` to
    confirm the app renders something (not a blank page, not an error overlay, not a crash)
