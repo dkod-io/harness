@@ -299,12 +299,36 @@ Code review runs automatically after every `dk_submit`. Two tiers:
 
 **Score guide:**
 
-| Score | Meaning | Orchestrator action |
-|-------|---------|---------------------|
-| 5 | No issues | Proceed to approve |
-| 4 | Minor warnings | Proceed, optionally fix (unless an "error" severity finding is present — re-dispatch same as score < 3) |
-| 3 | Test gaps or conventions | Fix if quick, else proceed (unless an "error" severity finding is present — re-dispatch same as score < 3) |
-| 2 | Errors found | Re-dispatch generator |
-| 1 | Security issues | Re-dispatch generator |
+| Score | Meaning | Generator action |
+|-------|---------|------------------|
+| 5 | No issues | Exit — changeset is clean |
+| 4 | Minor warnings | Exit — unless `severity:"error"` finding present, then fix + re-submit |
+| 3 | Test gaps or conventions | Fix + re-submit |
+| 2 | Errors found | Fix + re-submit |
+| 1 | Security issues | Fix + re-submit |
 
-**Review is advisory** — it never blocks merge. The orchestrator checks the score and may re-dispatch generators, but proceeds after max 2 review-fix rounds.
+### Generator Review-Fix Loop
+
+**Generators own the review-fix lifecycle.** After `dk_submit`, each generator stays alive
+to receive both local and deep review feedback and fix issues before exiting.
+
+```
+dk_submit(intent)
+  → local review inline (score + findings)
+
+LOOP (max 3 rounds):
+  1. If local review has severity:"error" → fix files → dk_submit again
+  2. dk_watch(filter: "changeset.review.completed")  — blocks until deep review done
+  3. dk_review(changeset_id) → get deep findings
+  4. If score < 4 OR severity:"error" → fix files → dk_submit → next round
+  5. Else → break (changeset is clean)
+
+EXIT: return { changeset_id, final_score, rounds_used }
+```
+
+**Key behaviors:**
+- `dk_watch` blocks at tool level — zero LLM inference while waiting for deep review
+- Max 3 rounds, then exit regardless of score (review is advisory, never blocks landing)
+- The orchestrator collects changeset_ids + scores from generator exits — no dk_status
+  parsing or session-to-changeset mapping needed in LAND phase
+- All generators run their review-fix loops in parallel (isolated sessions)
