@@ -303,7 +303,7 @@ Acceptance criteria:
 Also define **overall acceptance criteria** for the complete application:
 ```
 Overall criteria:
-- Application starts without errors (npm run dev / python main.py)
+- Application starts without errors (bun run dev / python main.py)
 - Home page loads and renders correctly
 - User can sign up, log in, and access protected features
 - Core CRUD operations work end-to-end

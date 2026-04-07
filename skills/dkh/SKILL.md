@@ -247,6 +247,11 @@ The orchestrator (you, when this skill is active) drives the entire loop autonom
 **Each phase has a gate check at entry and exit. Do not skip gates.**
 
 ### Phase 1: Plan
+
+**Tell the user what to expect before starting:**
+> "Launching Phase 1: Plan. The planner will analyze the existing codebase and produce
+> work units for parallel execution. This typically takes 3-5 minutes."
+
 1. Spawn the **planner** agent
 2. Wait for the plan to complete
 
@@ -428,7 +433,7 @@ is made autonomously:
 - Eval failures → auto-fix with targeted re-dispatch
 - Framework choice → infer from the prompt
 - Port numbers → use defaults (5173 for Vite, 3000 for Next, etc.)
-- Package manager → detect from lockfiles or default to npm
+- Package manager → use bun (detect from lockfiles, prefer bun over npm/yarn)
 
 ### 6. Max 3 eval rounds
 Prevents infinite loops. After 3 rounds, ship whatever works and document what doesn't.

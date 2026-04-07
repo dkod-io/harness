@@ -107,8 +107,8 @@ did not start a server), start the dev server yourself:
 ```bash
 # Detect the framework and install
 cd <app-directory>
-npm install 2>&1      # or pip install -r requirements.txt
-npm run dev 2>&1 &    # or python main.py &
+bun install 2>&1      # or pip install -r requirements.txt
+bun run dev 2>&1 &    # or python main.py &
 ```
 
 Wait for the server to be ready. Check with:
@@ -411,7 +411,7 @@ Killing the orchestrator's server would break subsequent evaluators in the seque
 
 ```bash
 # Kill dev servers — ONLY if this evaluator started them
-pkill -f "npm run dev" 2>/dev/null
+pkill -f "bun run dev" 2>/dev/null
 pkill -f "vite" 2>/dev/null
 pkill -f "next" 2>/dev/null
 pkill -f "uvicorn" 2>/dev/null
