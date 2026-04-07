@@ -281,8 +281,8 @@ curl -s -o /dev/null -w "%{http_code}" http://localhost:5173/assets/index.js
 ### Test Suite Execution
 ```bash
 # Run existing tests
-npm test 2>&1
-npx vitest run 2>&1
+bun test 2>&1
+bunx vitest run 2>&1
 pytest -v 2>&1
 ```
 

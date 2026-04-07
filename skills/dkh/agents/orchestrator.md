@@ -239,8 +239,8 @@ Proceed to Phase 4. DO NOT PUSH. DO NOT ASK THE USER.
 This is a hard gate — not optional. If the app crashes on startup, evaluators will waste
 tokens testing a broken app. Fix the build first.
 
-1. Install dependencies: `npm install` (or equivalent)
-2. Start the dev server: `npm run dev` (or equivalent)
+1. Install dependencies: `bun install`
+2. Start the dev server: `bun run dev`
 3. Wait for the server to be ready (check the port)
 4. **Verify the app loads** — use chrome-devtools `navigate_page` + `take_screenshot` to
    confirm the app renders something (not a blank page, not an error overlay, not a crash)
@@ -458,7 +458,7 @@ You decide:
 | Decision | Your Default |
 |----------|-------------|
 | Framework/stack | Infer from prompt. Default: React + Vite + TypeScript for frontend, FastAPI + Python for backend, SQLite for simple DBs |
-| Package manager | Detect from lockfiles. Default: npm |
+| Package manager | Use bun. Detect from lockfiles, prefer bun over npm/yarn |
 | Port numbers | Vite: 5173, Next: 3000, FastAPI: 8000 |
 | Styling | Tailwind CSS unless prompt specifies otherwise |
 | Testing | Vitest for frontend, pytest for backend |
