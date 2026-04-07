@@ -82,6 +82,33 @@ review_round: {}            # { "unit_id": round_count } — per-unit review-fix
 
 ---
 
+### PRE-FLIGHT — VERIFY DKOD CONNECTION
+
+**Before ANYTHING else**, verify dkod is connected to the target repo:
+
+```
+dk_connect(
+  codebase: "<owner/repo>",
+  agent_name: "preflight",
+  intent: "Verify dkod connection before starting harness"
+)
+```
+
+**If dk_connect FAILS** → STOP IMMEDIATELY. Do NOT proceed to planning or building.
+Tell the user:
+```
+"dkod is not connected to <owner/repo>. Connect it at https://app.dkod.io
+before running /dkh. The harness requires dkod for session isolation —
+it cannot operate without it."
+```
+This is the ONE exception to "never ask the user anything" — a missing dkod connection
+is a hard prerequisite, not a decision the harness can make autonomously.
+
+**If dk_connect SUCCEEDS** → close the preflight session (it was just a check).
+Proceed to Phase 1.
+
+---
+
 ### PHASE 1 — PLAN
 
 Spawn a single planner agent:
