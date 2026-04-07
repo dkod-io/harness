@@ -313,22 +313,46 @@ Code review runs automatically after every `dk_submit`. Two tiers:
 to receive both local and deep review feedback and fix issues before exiting.
 
 ```
-dk_submit(intent)
-  → local review inline (score + findings)
+round = 1
+dk_submit(intent)  → response includes local review (score + findings)
 
-LOOP (max 3 rounds):
-  1. If local review has severity:"error" → fix files → dk_submit again
-  2. dk_watch(filter: "changeset.review.completed")  — blocks until deep review done
-  3. dk_review(changeset_id) → get deep findings
-  4. If score < 4 OR severity:"error" → fix files → dk_submit → next round
-  5. Else → break (changeset is clean)
+LOOP while round ≤ 3:
+
+  # 1. Check LOCAL review (inline with the dk_submit that just ran)
+  if local review has severity:"error" findings:
+    fix files based on local findings
+    round += 1
+    if round > 3 → break
+    dk_submit(intent)  → new local review
+    continue           → re-check local on the new submission
+
+  # 2. Local is clean — wait for DEEP review
+  dk_watch(filter: "changeset.review.completed")  — blocks, zero LLM cost
+  dk_review(changeset_id) → deep findings + score
+
+  # 3. Check deep review
+  if score ≥ 4 AND no severity:"error" findings:
+    break  → changeset is clean
+
+  # 4. Deep found issues — fix and re-submit
+  fix files based on deep findings
+  round += 1
+  if round > 3 → break
+  dk_submit(intent)  → new local review
+  # loop continues — re-check local before waiting for deep again
 
 EXIT: return { changeset_id, final_score, rounds_used }
 ```
 
+**Round counting:** every `dk_submit` (including the initial one) is a round. A local-error
+re-submit consumes a round. This prevents local↔deep ping-pong from exceeding 3 total
+submissions.
+
 **Key behaviors:**
+- After every `dk_submit`, local review is re-checked before proceeding to `dk_watch` —
+  no silent carrying of unfixed local errors into the deep-review wait
 - `dk_watch` blocks at tool level — zero LLM inference while waiting for deep review
-- Max 3 rounds, then exit regardless of score (review is advisory, never blocks landing)
+- Max 3 rounds (= 3 submissions), then exit regardless of score (review is advisory)
 - The orchestrator collects changeset_ids + scores from generator exits — no dk_status
   parsing or session-to-changeset mapping needed in LAND phase
 - All generators run their review-fix loops in parallel (isolated sessions)
