@@ -388,6 +388,7 @@ Read the evaluator's **verdict**:
 **Temp branch cleanup:** After `dk_push(mode: "pr")` completes, delete the sync branch:
 ```
 git push origin --delete dkh/sync-<repo-name>
+git branch -d dkh/sync-<repo-name>
 git checkout main
 ```
 This keeps the remote clean — only the PR branch remains.
