@@ -34,6 +34,24 @@ because dkod's AST-level merge eliminates false conflicts.
 - User describes a complete application or feature set to build from scratch
 - Any task complex enough to benefit from parallel decomposition + evaluation
 
+## Handling `/dkh continue`
+
+When the user sends `/dkh continue` (or just "continue"):
+
+1. **If an active harness session exists** (the agent has state from a prior turn):
+   - Output the current harness state and phase
+   - Show which agents are active and what they're doing
+   - Resume the harness loop from where it left off
+   - Example: "Resuming harness — currently in Phase 2: Build. 4/7 generators complete, 3 still running."
+
+2. **If no active harness session exists** (fresh context after app restart):
+   - Acknowledge the command: "No active harness session found in this context."
+   - Check for any active dkod sessions via `dk_status`
+   - If active sessions found, report their state
+   - If no sessions found, tell the user to start a new build with `/dkh <prompt>`
+
+**Never ignore a `/dkh continue` silently.** Always acknowledge with current status.
+
 ## Prerequisites Check
 
 Before starting, verify these are available:
