@@ -84,6 +84,7 @@ unit_attempts: {}           # { "unit-id": attempt_count } — incremented each 
 blocked_units: []           # Units that exceeded MAX_UNIT_ATTEMPTS (3) — not retried
 replan_count: 0             # Number of REPLANs executed this build (max 1)
 review_round: {}            # { "unit_id": round_count } — per-unit review-fix counter, keyed by unit NOT changeset (max 2)
+session_map: {}             # { changeset_id: session_id } — populated from each generator's dk_connect response, needed for dk_close
 ```
 
 ---
@@ -190,7 +191,7 @@ Before proceeding, verify:
 - [ ] Every report includes a changeset_id
 - [ ] `changeset_ids` has one entry per unit in `active_units`
 
-**If gate fails** → re-dispatch crashed generators. Do NOT proceed until all have submitted.
+**If gate fails** → for each crashed generator that has a recorded changeset_id, call `dk_close(session_map[changeset_id])` to release its claims. Then re-dispatch. Do NOT proceed until all have submitted.
 **If gate passes** → set `changeset_ids = [...]`. Output the updated state block showing all collected changeset_ids:
 > **Gate 2 PASSED** — `changeset_ids: [id1, id2, ...]`, `active_units: [N units]`. Proceeding to Phase 3 (Land).
 
@@ -245,7 +246,7 @@ Before proceeding, verify:
 Partial merge failures are tolerable — the evaluator will catch missing functionality.
 But if ZERO changesets merged, that's a hard block.
 
-**If zero merges** → re-dispatch generators with error context.
+**If zero merges** → close all changeset sessions (`dk_close(session_map[id])` for each changeset_id) to release claims, then re-dispatch generators with error context.
 **If some merged** → update `merged_commit = <hash>`, record `merge_failures`.
 Output the updated state block:
 > **Gate 3 PASSED** — `merged_commit: [hash]`, `merge_failures: [list or empty]`. Proceeding to Phase 4 (Eval).
@@ -443,11 +444,12 @@ When Phase 5 decides to fix, explicitly reset state before the next round:
 # FIRST: close all old changesets to release symbol claims.
 # Without this, re-dispatched generators will self-conflict.
 for each changeset_id in changeset_ids:
-  dk_close(session_id for this changeset)
+  dk_close(session_map[changeset_id])
 
 round += 1
 active_units = [failed units from eval, EXCLUDING blocked_units]
 changeset_ids = []          # wiped — new generators will repopulate
+session_map = {}            # wiped — new generators will repopulate
 merged_commit = null        # wiped — new merges will set this
 merge_failures = []         # wiped
 eval_reports = []           # wiped — new evaluators will repopulate
@@ -471,6 +473,7 @@ replan_count += 1           # increment FIRST — survives the reset
 round = 1                   # restart from round 1
 active_units = []           # wiped — new plan will repopulate
 changeset_ids = []          # wiped
+session_map = {}            # wiped
 merged_commit = null        # wiped
 merge_failures = []         # wiped
 eval_reports = []           # wiped
