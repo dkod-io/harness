@@ -228,7 +228,7 @@ After dk_verify for each changeset:
    a. **Update `session_map`**: record `session_map[new_changeset_id] = new_session_id` (remove the old entry)
    b. **Stage** the new changeset_id (do NOT overwrite `changeset_ids` yet — the original verified changeset must remain as fallback)
    c. **Run `dk_verify`** on the new changeset — re-submitted code must pass lint/type-check/tests
-   d. If dk_verify fails, keep the original changeset_id in `changeset_ids` (skip to approve after max rounds using the last verified changeset)
+   d. If dk_verify fails, call `dk_close(session_map[new_changeset_id])` to release the new session's claims, then keep the original changeset_id in `changeset_ids` (skip to approve after max rounds using the last verified changeset)
    e. If dk_verify passes, **commit** the new changeset_id to `changeset_ids` (replacing the old one), call `dk_review` again, and **return to step 2** to re-evaluate the score and findings
 6. **Max 2 review-fix rounds per unit** — enforced by the first condition in step 2
 7. Track `review_round[unit_id]` separately from eval `round` in state — key by unit_id (stable), NOT changeset_id (changes on re-submit)
