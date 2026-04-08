@@ -95,15 +95,40 @@ Call `dk_context` with queries relevant to your work unit:
 
 Call `dk_file_read` for any files you need to understand before modifying them.
 
-Your dkod session sees the base codebase snapshot at connection time. Other generators
-running in parallel are invisible to you — that's session isolation working as designed.
+Your dkod session starts with the base codebase snapshot at connection time. While session
+writes are isolated, you CAN see other agents' merged changes via `dk_watch` and should
+adapt your implementation to avoid conflicts.
+
+### Step 2.5: Monitor Other Agents
+
+After `dk_connect`, set up a watch for other generators' merged work:
+
+```
+dk_watch(filter: "changeset.submitted,changeset.merged")
+```
+
+This subscribes you to notifications whenever another generator submits or merges a
+changeset. You won't see their in-progress writes (session isolation), but you WILL see
+their completed work as soon as it lands. Check these events before writing each file:
+
+1. **Before each `dk_file_write`**, check if `dk_watch` has reported changes to symbols
+   in the file you're about to write.
+2. **If another agent has modified symbols in the same file**, call `dk_file_read` to get
+   the latest merged version. Incorporate their changes into your write — don't overwrite
+   blindly.
+3. **If no watch events affect your file**, proceed normally with `dk_file_write`.
+
+This is a lightweight pre-check — it doesn't replace `conflict_warnings` handling in
+Step 3, but it prevents most conflicts from occurring in the first place.
 
 ### Step 3: Implement
 
 For each file in your work unit:
-1. Read the current file (if it exists) with `dk_file_read`
-2. Write the complete file content with `dk_file_write`
-3. **Check the response for `conflict_warnings`** — if present, another generator already
+1. **Proactive check:** review `dk_watch` events — if another agent has touched this file
+   since you last read it, call `dk_file_read` to get the latest merged version first
+2. Read the current file (if it doesn't exist in watch events) with `dk_file_read`
+3. Write the complete file content with `dk_file_write`
+4. **Check the response for `conflict_warnings`** — if present, another generator already
    merged changes to the same symbols. You MUST:
    - **Stop** — do not write any more files
    - **Read the merged version** from the warning message (it includes their code)
@@ -113,7 +138,7 @@ For each file in your work unit:
    - If warnings persist after your rewrite (rare — means a third agent merged while you
      were adapting), repeat the cycle up to 2 more times. After 3 attempts, proceed with
      your best version — the merge handler will catch any remaining conflicts.
-4. dk_file_write handles session isolation — no other generator sees your changes
+5. dk_file_write handles session isolation — no other generator sees your changes
 
 **Implementation principles:**
 
@@ -275,9 +300,9 @@ In this case:
    unrelated code, even if you think it's better.
 3. **Don't merge.** Only submit. Never call `dk_merge`, `dk_approve`, `dk_push`, or
    `dk_verify`. The orchestrator handles the entire landing sequence in Phase 3.
-4. **Don't coordinate with other generators.** You can't see their work anyway (dkod session
-   isolation). Trust the plan — if it says you can work on these symbols, you can. Other
-   generators may be editing the same files right now — dkod's AST merge handles it.
+4. **Monitor but don't coordinate.** Use `dk_watch` events to see merged changes from other
+   generators, but don't try to communicate or synchronize with them. Adapt to their merged
+   work by re-reading files before writing — dkod's AST merge handles the rest.
 5. **Be thorough.** A half-implemented unit that passes 3/5 criteria is worse than nothing.
    Implement all criteria or report that a criterion is impossible.
 6. **Handle edge cases in the code.** Error states, empty states, loading states, invalid
