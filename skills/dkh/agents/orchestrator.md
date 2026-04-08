@@ -224,11 +224,12 @@ After dk_verify for each changeset:
    - Original work unit spec
    - Review findings (copy the dk_review output verbatim as context)
    - Instruction: "Fix these code review findings, then re-submit via dk_submit"
-5. After generator re-submits with a new changeset_id:
-   a. **Stage** the new changeset_id (do NOT overwrite `changeset_ids` yet — the original verified changeset must remain as fallback)
-   b. **Run `dk_verify`** on the new changeset — re-submitted code must pass lint/type-check/tests
-   c. If dk_verify fails, keep the original changeset_id in `changeset_ids` (skip to approve after max rounds using the last verified changeset)
-   d. If dk_verify passes, **commit** the new changeset_id to `changeset_ids` (replacing the old one), call `dk_review` again, and **return to step 2** to re-evaluate the score and findings
+5. After generator re-submits with a new session_id and changeset_id:
+   a. **Update `session_map`**: record `session_map[new_changeset_id] = new_session_id` (remove the old entry)
+   b. **Stage** the new changeset_id (do NOT overwrite `changeset_ids` yet — the original verified changeset must remain as fallback)
+   c. **Run `dk_verify`** on the new changeset — re-submitted code must pass lint/type-check/tests
+   d. If dk_verify fails, keep the original changeset_id in `changeset_ids` (skip to approve after max rounds using the last verified changeset)
+   e. If dk_verify passes, **commit** the new changeset_id to `changeset_ids` (replacing the old one), call `dk_review` again, and **return to step 2** to re-evaluate the score and findings
 6. **Max 2 review-fix rounds per unit** — enforced by the first condition in step 2
 7. Track `review_round[unit_id]` separately from eval `round` in state — key by unit_id (stable), NOT changeset_id (changes on re-submit)
 
@@ -247,7 +248,7 @@ Before proceeding, verify:
 Partial merge failures are tolerable — the evaluator will catch missing functionality.
 But if ZERO changesets merged, that's a hard block.
 
-**If zero merges** → close all changeset sessions (`dk_close(session_map[id])` for each changeset_id) to release claims, then re-dispatch generators with error context.
+**If zero merges** → close all changeset sessions (`dk_close(session_map[id])` for each changeset_id) to release claims, then wipe stale state (`changeset_ids = []`, `session_map = {}`, `merged_commit = null`, `merge_failures = []`), then re-dispatch generators with error context.
 **If some merged** → update `merged_commit = <hash>`, record `merge_failures`.
 Output the updated state block:
 > **Gate 3 PASSED** — `merged_commit: [hash]`, `merge_failures: [list or empty]`. Proceeding to Phase 4 (Eval).
