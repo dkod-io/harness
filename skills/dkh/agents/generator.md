@@ -233,14 +233,15 @@ and current score.
 ### Step 6: Report
 
 After the review-fix loop exits (clean score or 3 rounds exhausted), report your
-changeset_id back to the orchestrator and **exit immediately**. Do NOT call `dk_merge`,
-`dk_approve`, `dk_push`, or `dk_verify` — the orchestrator lands all changesets in the
-correct dependency order during Phase 3.
+session_id and changeset_id back to the orchestrator and **exit immediately**. Do NOT call
+`dk_merge`, `dk_approve`, `dk_push`, or `dk_verify` — the orchestrator lands all changesets
+in the correct dependency order during Phase 3.
 
 ```
 ## Generator Report: <unit title>
 
 **Status:** submitted
+**Session ID:** <from dk_connect response>
 **Changeset ID:** <from dk_submit response>
 **Final review score:** <score after last round>
 **Rounds used:** <1-3>

@@ -171,7 +171,8 @@ Agent(
   prompt: <inject generator.md instructions + spec + this unit +
           "CRITICAL: Use dk_connect → dk_file_write → dk_submit ONLY.
            NEVER use Write, Edit, or Bash to create/modify source files.
-           NEVER use git commands. All code goes through dkod.">,
+           NEVER use git commands. All code goes through dkod.
+           Report BOTH session_id AND changeset_id when done.">,
   description: "Build: <unit title>",
   name: "generator-<unit-id>"
 )
@@ -180,8 +181,8 @@ Agent(
 
 Wait for all generators to complete.
 
-**As each generator completes**, output a progress line:
-> Generator **[unit-name]** complete — changeset `[id]`, self-score [X/5]. Progress: **N/M generators done.**
+**As each generator completes**, record its session_id and changeset_id in `session_map`, then output a progress line:
+> Generator **[unit-name]** complete — session `[sid]`, changeset `[id]`, self-score [X/5]. Progress: **N/M generators done.**
 
 This keeps the user informed as changesets arrive instead of showing a stale empty state for the entire build phase.
 
@@ -192,7 +193,7 @@ Before proceeding, verify:
 - [ ] `changeset_ids` has one entry per unit in `active_units`
 
 **If gate fails** → for each crashed generator that has a recorded changeset_id, call `dk_close(session_map[changeset_id])` to release its claims. Then re-dispatch. Do NOT proceed until all have submitted.
-**If gate passes** → set `changeset_ids = [...]`. Output the updated state block showing all collected changeset_ids:
+**If gate passes** → set `changeset_ids = [...]` and verify `session_map` has an entry for each changeset_id. Output the updated state block:
 > **Gate 2 PASSED** — `changeset_ids: [id1, id2, ...]`, `active_units: [N units]`. Proceeding to Phase 3 (Land).
 
 ---
