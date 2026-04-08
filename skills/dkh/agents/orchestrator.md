@@ -64,6 +64,12 @@ You execute this loop until the application is complete or you hit the 3-round l
 check passes. You CANNOT skip phases. Skipping Phase 4 (Eval) is the most common failure
 mode — guard against it explicitly.**
 
+**CRITICAL: Before EVERY generator re-dispatch**, call `dk_close` on the old changeset_id
+to release its symbol claims. Without this, the new session's submit will conflict with
+the old session's stale claims — the agent will conflict with itself. This applies to
+ALL re-dispatch scenarios: review-fix, crashed generator recovery, round transitions,
+smoke test failures, and zero-merge recovery.
+
 ### State you must track:
 
 ```
@@ -210,18 +216,19 @@ After dk_verify for each changeset:
 2. Check the LOCAL review results (evaluate conditions in order):
    - **`review_round[unit_id]` >= 2** → max rounds reached, proceed to approve anyway (advisory)
    - **Score >= 3 AND no "error" severity findings** → proceed to approve
-   - **Score < 3 OR has "error" severity findings** → re-dispatch generator with review feedback
-3. **Increment `review_round[unit_id]`** by 1, then re-dispatch with payload:
+   - **Score < 3 OR has "error" severity findings** → close the old changeset, then re-dispatch generator with review feedback
+3. **Close the old changeset** before re-dispatch: `dk_close(session_id)` — this releases symbol claims so the new session won't self-conflict.
+4. **Increment `review_round[unit_id]`** by 1, then re-dispatch with payload:
    - Original work unit spec
    - Review findings (copy the dk_review output verbatim as context)
    - Instruction: "Fix these code review findings, then re-submit via dk_submit"
-4. After generator re-submits with a new changeset_id:
+5. After generator re-submits with a new changeset_id:
    a. **Stage** the new changeset_id (do NOT overwrite `changeset_ids` yet — the original verified changeset must remain as fallback)
    b. **Run `dk_verify`** on the new changeset — re-submitted code must pass lint/type-check/tests
    c. If dk_verify fails, keep the original changeset_id in `changeset_ids` (skip to approve after max rounds using the last verified changeset)
    d. If dk_verify passes, **commit** the new changeset_id to `changeset_ids` (replacing the old one), call `dk_review` again, and **return to step 2** to re-evaluate the score and findings
-5. **Max 2 review-fix rounds per unit** — enforced by the first condition in step 2
-6. Track `review_round[unit_id]` separately from eval `round` in state — key by unit_id (stable), NOT changeset_id (changes on re-submit)
+6. **Max 2 review-fix rounds per unit** — enforced by the first condition in step 2
+7. Track `review_round[unit_id]` separately from eval `round` in state — key by unit_id (stable), NOT changeset_id (changes on re-submit)
 
 Do NOT wait for deep review results — deep review runs asynchronously and is informational only. Only act on local review results which are available immediately after submit.
 
@@ -432,6 +439,12 @@ When Phase 5 decides to fix, explicitly reset state before the next round:
 
 ```
 # ROUND TRANSITION — execute this before re-entering Phase 2:
+
+# FIRST: close all old changesets to release symbol claims.
+# Without this, re-dispatched generators will self-conflict.
+for each changeset_id in changeset_ids:
+  dk_close(session_id for this changeset)
+
 round += 1
 active_units = [failed units from eval, EXCLUDING blocked_units]
 changeset_ids = []          # wiped — new generators will repopulate
