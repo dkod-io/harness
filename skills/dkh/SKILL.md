@@ -136,9 +136,9 @@ USER PROMPT
 │  • dk_approve ALL verified changesets               │
 │  • dk_merge each sequentially                       │
 │                                                     │
-│  ⚠️  DO NOT dk_push after landing!                  │
+│  ⚠️  DO NOT dk_push(mode:"pr") after landing!       │
 │  ⚠️  DO NOT ask the user what to do next!           │
-│  Proceed directly to EVAL.                          │
+│  Proceed to FILE SYNC then EVAL.                    │
 │                                                     │
 │  GATE 3 — Required output:                          │
 │  ✓ Every changeset merged OR recorded as failed     │
@@ -149,6 +149,16 @@ USER PROMPT
                      │
                      ▼
 ┌─────────────────────────────────────────────────────┐
+│  FILE SYNC — get merged code locally                 │
+│                                                     │
+│  dk_push(mode:"branch", branch_name:"dkh/sync-<repo>")  │
+│  Then: git fetch && git checkout -B dkh/sync-<repo>  │
+│  This is a temp branch — NOT a PR.                  │
+│  Cleanup happens in Phase 5.                        │
+│                                                     │
+│  ⚠️  NEVER use dk_file_read to sync files!          │
+│  ⚠️  One push + one checkout vs 100+ reads.         │
+├─────────────────────────────────────────────────────┤
 │  SMOKE TEST — MANDATORY BEFORE EVAL                  │
 │  *** App MUST start and load before eval ***         │
 │                                                     │
@@ -224,11 +234,12 @@ USER PROMPT
    quality gate in Phase 3. Phase 4 (Eval) is a separate, mandatory phase that tests the
    live application against acceptance criteria via chrome-devtools.
 
-6. **dk_push is ONLY allowed in Phase 5.** Not after Phase 3. Not "just to save progress."
-   `dk_push` creates a branch or PR on GitHub — that is SHIPPING. Shipping happens after eval.
-   If you catch yourself calling `dk_push` before `eval_reports` is populated, STOP. You are
-   violating the harness. `dk_merge` commits code to the dkod session locally — that is
-   LANDING, not shipping. Landing is Phase 3. Shipping is Phase 5.
+6. **dk_push(mode:"pr") is ONLY allowed in Phase 5.** Not after Phase 3. Not "just to save
+   progress." The one exception: `dk_push(mode:"branch", branch_name:"dkh/sync-*")` is required
+   after landing to sync merged code locally for the smoke test. This is a temp branch, not
+   a PR — it gets cleaned up in Phase 5. If you catch yourself calling `dk_push(mode:"pr")`
+   before `eval_reports` is populated, STOP. `dk_merge` commits code to the dkod session
+   locally — that is LANDING, not shipping. Landing is Phase 3. Shipping is Phase 5.
 
 7. **NEVER ask the user anything.** Not "should I proceed?" Not "what's your preference?"
    Not "option A or B?" The user gave you a prompt and walked away. Every decision is yours.
@@ -298,7 +309,9 @@ No session-to-changeset mapping needed. No review score checking needed.
 4. **Merge sequentially**: `dk_merge` each one at a time
 5. Handle conflicts: `dk_resolve` → retry
 
-**DO NOT dk_push. Shipping is Phase 5 only.**
+**DO NOT dk_push(mode:"pr"). PRs are Phase 5 only.** The only allowed push after
+landing is `dk_push(mode:"branch")` for the file sync step — this creates a temporary
+branch, not a PR.
 
 **GATE 3 CHECK:**
 - [ ] Every changeset merged OR recorded as failed with reason
@@ -307,11 +320,26 @@ No session-to-changeset mapping needed. No review score checking needed.
 Partial merge failures are tolerable — the evaluator will catch missing functionality.
 Zero merges is a hard block — re-dispatch generators before advancing.
 
-### Smoke Test — MANDATORY BEFORE EVAL
+### File Sync — Get Merged Code Locally
 **GATE 3 ENTRY CHECK**: "Did at least one changeset merge? Do I have a commit hash? YES → proceed."
 
+After all merges are complete, sync the merged code to the local filesystem for smoke
+testing and evaluation. **Do NOT use dk_file_read** to sync files one by one — that wastes
+100+ tool calls and can exceed turn limits.
+
+1. Push merged code to a temporary branch:
+   `dk_push(mode: "branch", branch_name: "dkh/sync-<repo-name>")`
+   This is NOT a PR — just a sync branch for local checkout.
+2. Fetch and checkout locally:
+   `git fetch origin && git checkout -B dkh/sync-<repo-name> origin/dkh/sync-<repo-name>`
+3. Verify the checkout succeeded (files exist on disk)
+
+The temp branch `dkh/sync-*` is cleaned up in Phase 5 after the final PR push.
+
+### Smoke Test — MANDATORY BEFORE EVAL
+
 Before dispatching evaluators, verify the app actually starts and loads:
-1. Install deps, start dev server, wait for port
+1. Install deps (`bun install`), start dev server, wait for port
 2. Navigate to the app with chrome-devtools, take a screenshot
 3. Confirm the screenshot shows real content (not error overlay, not blank page)
 4. Check console for fatal errors
@@ -355,12 +383,20 @@ If an evaluator crashed → re-dispatch that evaluator. Do not proceed without c
 YES → proceed. NO → GO BACK TO PHASE 4."
 
 Read the evaluator's **verdict**:
-- **PASS** → `dk_push(mode: "pr")`. Create the PR. Done.
+- **PASS** → `dk_push(mode: "pr")`. Create the PR. Clean up temp branch. Done.
 - **RETRY** (round < 3) → Increment per-unit attempt counts. Auto-block units with 3+
   attempts. Re-dispatch remaining failed units with feedback. Phase 2 → 3 → 4 → 5.
-- **RETRY** (round 3) → `dk_push(mode: "pr")` with issues documented.
+- **RETRY** (round 3) → `dk_push(mode: "pr")` with issues documented. Clean up temp branch.
 - **REPLAN** (max 1 per build) → Re-run planner with eval report. Reset round to 1.
   Back to Phase 1 gate check.
+
+**Temp branch cleanup:** After `dk_push(mode: "pr")` completes, delete the sync branch:
+```
+git push origin --delete dkh/sync-<repo-name>
+git checkout main
+git branch -d dkh/sync-<repo-name>
+```
+This keeps the remote clean — only the PR branch remains.
 
 **FINAL GATE**: The PR description MUST include the eval results (scores, pass rate,
 verdict, evidence summary). If the PR description doesn't reference eval results, you

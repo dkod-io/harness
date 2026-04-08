@@ -231,9 +231,23 @@ Proceed to Phase 4. DO NOT PUSH. DO NOT ASK THE USER.
 
 ---
 
-### SMOKE TEST — MANDATORY BEFORE EVAL
+### FILE SYNC — Get Merged Code Locally
 
 **Entry check**: `merged_commit` must be set. If null → STOP, go back to Phase 3.
+
+Sync the merged code to the local filesystem. **Do NOT use `dk_file_read`** to sync
+files one by one — that wastes 100+ tool calls and can exceed turn limits.
+
+1. Push merged code to a temporary branch:
+   `dk_push(mode: "branch", branch_name: "dkh/sync-<repo-name>")`
+   This is NOT a PR — just a sync branch for local checkout.
+2. Fetch and checkout locally:
+   `git fetch origin && git checkout -B dkh/sync-<repo-name> origin/dkh/sync-<repo-name>`
+3. Verify the checkout succeeded (files exist on disk)
+
+The temp branch `dkh/sync-*` is cleaned up in Phase 5 after the final PR push.
+
+### SMOKE TEST — MANDATORY BEFORE EVAL
 
 **Before dispatching ANY evaluator, you MUST verify the app actually starts and loads.**
 This is a hard gate — not optional. If the app crashes on startup, evaluators will waste
@@ -262,7 +276,7 @@ failure, not an eval failure. DO NOT dispatch evaluators. Instead:
   Instead, `dk_push` with "app fails to start after 3 rounds" documented. This matches
   the Phase 5 RETRY round-3 behavior.
 - Re-dispatch all generators with the crash error as feedback
-- After fix round, re-land, re-run smoke test
+- After fix round, re-land, **re-run FILE SYNC** (dk_push branch + git checkout), then re-run smoke test
 
 **If smoke test PASSES** → Record the server URL. Proceed to Phase 4 (Eval).
 
@@ -353,7 +367,7 @@ is the aggregate verdict PASS. Use the aggregate verdict below.
 
 Read the aggregate **verdict**:
 
-- **PASS** → `dk_push(mode: "pr")`. Include eval summary in PR description. Done.
+- **PASS** → `dk_push(mode: "pr")`. Clean up sync branch (see below). Include eval summary in PR description. Done.
 
 - **RETRY, round < 3** → For each failed unit:
   - Increment `unit_attempts[unit_id]`
@@ -362,7 +376,7 @@ Read the aggregate **verdict**:
   - If all remaining units are blocked → forced ship with documented failures
   - Otherwise → execute Round Transition, re-enter Phase 2
 
-- **RETRY, round 3** → `dk_push(mode: "pr")` with issues documented. Report honestly.
+- **RETRY, round 3** → `dk_push(mode: "pr")` with issues documented. Clean up sync branch. Report honestly.
 
 - **REPLAN** (max 1 per build) → Check `replan_count`:
   - If `replan_count >= 1` → treat as RETRY instead (prevent infinite replanning)
@@ -380,6 +394,13 @@ Read the aggregate **verdict**:
 - [Per-unit scores and evidence summary]
 ```
 If the PR description doesn't include eval results → you skipped Phase 4.
+
+**Sync branch cleanup** (after `dk_push(mode: "pr")` on PASS or round-3 RETRY):
+```
+git push origin --delete dkh/sync-<repo-name>
+git checkout main
+git branch -d dkh/sync-<repo-name>
+```
 
 ---
 
@@ -443,8 +464,9 @@ After state reset, skip Phase 1 (plan exists). Enter Phase 2 with `active_units`
 - The evaluator's specific failure feedback + evidence
 - Instructions to fix only the failing criteria
 
-Then proceed through Phase 3 (Land) → Phase 4 (Eval) → Phase 5 (Ship or Fix).
-**Phase 4 is mandatory on EVERY round. Not just round 1.**
+Then proceed through Phase 3 (Land) → **FILE SYNC** → Smoke Test → Phase 4 (Eval) → Phase 5 (Ship or Fix).
+**FILE SYNC and Phase 4 are mandatory on EVERY round. Not just round 1.**
+The sync branch (`dkh/sync-<repo>`) is overwritten on each push — no need to delete between rounds.
 
 ## Decision-Making Rules
 
