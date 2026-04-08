@@ -64,6 +64,12 @@ You execute this loop until the application is complete or you hit the 3-round l
 check passes. You CANNOT skip phases. Skipping Phase 4 (Eval) is the most common failure
 mode — guard against it explicitly.**
 
+**CRITICAL: Before EVERY generator re-dispatch**, call `dk_close` on the old changeset_id
+to release its symbol claims. Without this, the new session's submit will conflict with
+the old session's stale claims — the agent will conflict with itself. This applies to
+ALL re-dispatch scenarios: review-fix, crashed generator recovery, round transitions,
+smoke test failures, and zero-merge recovery.
+
 ### State you must track:
 
 ```
@@ -78,6 +84,7 @@ unit_attempts: {}           # { "unit-id": attempt_count } — incremented each 
 blocked_units: []           # Units that exceeded MAX_UNIT_ATTEMPTS (3) — not retried
 replan_count: 0             # Number of REPLANs executed this build (max 1)
 review_round: {}            # { "unit_id": round_count } — per-unit review-fix counter, keyed by unit NOT changeset (max 2)
+session_map: {}             # { changeset_id: session_id } — populated from each generator's dk_connect response, needed for dk_close
 ```
 
 ---
@@ -164,7 +171,8 @@ Agent(
   prompt: <inject generator.md instructions + spec + this unit +
           "CRITICAL: Use dk_connect → dk_file_write → dk_submit ONLY.
            NEVER use Write, Edit, or Bash to create/modify source files.
-           NEVER use git commands. All code goes through dkod.">,
+           NEVER use git commands. All code goes through dkod.
+           Report BOTH session_id AND changeset_id when done.">,
   description: "Build: <unit title>",
   name: "generator-<unit-id>"
 )
@@ -173,8 +181,8 @@ Agent(
 
 Wait for all generators to complete.
 
-**As each generator completes**, output a progress line:
-> Generator **[unit-name]** complete — changeset `[id]`, self-score [X/5]. Progress: **N/M generators done.**
+**As each generator completes**, record its session_id and changeset_id in `session_map`, then output a progress line:
+> Generator **[unit-name]** complete — session `[sid]`, changeset `[id]`, self-score [X/5]. Progress: **N/M generators done.**
 
 This keeps the user informed as changesets arrive instead of showing a stale empty state for the entire build phase.
 
@@ -184,8 +192,8 @@ Before proceeding, verify:
 - [ ] Every report includes a changeset_id
 - [ ] `changeset_ids` has one entry per unit in `active_units`
 
-**If gate fails** → re-dispatch crashed generators. Do NOT proceed until all have submitted.
-**If gate passes** → set `changeset_ids = [...]`. Output the updated state block showing all collected changeset_ids:
+**If gate fails** → for each crashed generator that has a recorded changeset_id, call `dk_close(session_map[changeset_id])` to release its claims. Then re-dispatch. Do NOT proceed until all have submitted.
+**If gate passes** → set `changeset_ids = [...]` and verify `session_map` has an entry for each changeset_id. Output the updated state block:
 > **Gate 2 PASSED** — `changeset_ids: [id1, id2, ...]`, `active_units: [N units]`. Proceeding to Phase 3 (Land).
 
 ---
@@ -210,18 +218,20 @@ After dk_verify for each changeset:
 2. Check the LOCAL review results (evaluate conditions in order):
    - **`review_round[unit_id]` >= 2** → max rounds reached, proceed to approve anyway (advisory)
    - **Score >= 3 AND no "error" severity findings** → proceed to approve
-   - **Score < 3 OR has "error" severity findings** → re-dispatch generator with review feedback
-3. **Increment `review_round[unit_id]`** by 1, then re-dispatch with payload:
+   - **Score < 3 OR has "error" severity findings** → close the old changeset, then re-dispatch generator with review feedback
+3. **Close the old changeset** before re-dispatch: `dk_close(session_id)` — this releases symbol claims so the new session won't self-conflict.
+4. **Increment `review_round[unit_id]`** by 1, then re-dispatch with payload:
    - Original work unit spec
    - Review findings (copy the dk_review output verbatim as context)
    - Instruction: "Fix these code review findings, then re-submit via dk_submit"
-4. After generator re-submits with a new changeset_id:
-   a. **Stage** the new changeset_id (do NOT overwrite `changeset_ids` yet — the original verified changeset must remain as fallback)
-   b. **Run `dk_verify`** on the new changeset — re-submitted code must pass lint/type-check/tests
-   c. If dk_verify fails, keep the original changeset_id in `changeset_ids` (skip to approve after max rounds using the last verified changeset)
-   d. If dk_verify passes, **commit** the new changeset_id to `changeset_ids` (replacing the old one), call `dk_review` again, and **return to step 2** to re-evaluate the score and findings
-5. **Max 2 review-fix rounds per unit** — enforced by the first condition in step 2
-6. Track `review_round[unit_id]` separately from eval `round` in state — key by unit_id (stable), NOT changeset_id (changes on re-submit)
+5. After generator re-submits with a new session_id and changeset_id:
+   a. **Update `session_map`**: record `session_map[new_changeset_id] = new_session_id` (remove the old entry)
+   b. **Stage** the new changeset_id (do NOT overwrite `changeset_ids` yet — the original verified changeset must remain as fallback)
+   c. **Run `dk_verify`** on the new changeset — re-submitted code must pass lint/type-check/tests
+   d. If dk_verify fails, call `dk_close(session_map[new_changeset_id])` to release the new session's claims, then keep the original changeset_id in `changeset_ids` (skip to approve after max rounds using the last verified changeset)
+   e. If dk_verify passes, **commit** the new changeset_id to `changeset_ids` (replacing the old one), call `dk_review` again, and **return to step 2** to re-evaluate the score and findings
+6. **Max 2 review-fix rounds per unit** — enforced by the first condition in step 2
+7. Track `review_round[unit_id]` separately from eval `round` in state — key by unit_id (stable), NOT changeset_id (changes on re-submit)
 
 Do NOT wait for deep review results — deep review runs asynchronously and is informational only. Only act on local review results which are available immediately after submit.
 
@@ -238,7 +248,7 @@ Before proceeding, verify:
 Partial merge failures are tolerable — the evaluator will catch missing functionality.
 But if ZERO changesets merged, that's a hard block.
 
-**If zero merges** → re-dispatch generators with error context.
+**If zero merges** → close all changeset sessions (`dk_close(session_map[id])` for each changeset_id) to release claims, then wipe stale state (`changeset_ids = []`, `session_map = {}`, `merged_commit = null`, `merge_failures = []`), then re-dispatch generators with error context.
 **If some merged** → update `merged_commit = <hash>`, record `merge_failures`.
 Output the updated state block:
 > **Gate 3 PASSED** — `merged_commit: [hash]`, `merge_failures: [list or empty]`. Proceeding to Phase 4 (Eval).
@@ -432,9 +442,16 @@ When Phase 5 decides to fix, explicitly reset state before the next round:
 
 ```
 # ROUND TRANSITION — execute this before re-entering Phase 2:
+
+# FIRST: close all old changesets to release symbol claims.
+# Without this, re-dispatched generators will self-conflict.
+for each changeset_id in changeset_ids:
+  dk_close(session_map[changeset_id])
+
 round += 1
 active_units = [failed units from eval, EXCLUDING blocked_units]
 changeset_ids = []          # wiped — new generators will repopulate
+session_map = {}            # wiped — new generators will repopulate
 merged_commit = null        # wiped — new merges will set this
 merge_failures = []         # wiped
 eval_reports = []           # wiped — new evaluators will repopulate
@@ -454,10 +471,16 @@ When Phase 5 chooses REPLAN (and `replan_count == 0`), reset state for a full re
 
 ```
 # REPLAN TRANSITION — execute this before re-entering Phase 1:
+
+# FIRST: close all old changesets to release symbol claims.
+for each changeset_id in changeset_ids:
+  dk_close(session_map[changeset_id])
+
 replan_count += 1           # increment FIRST — survives the reset
 round = 1                   # restart from round 1
 active_units = []           # wiped — new plan will repopulate
 changeset_ids = []          # wiped
+session_map = {}            # wiped
 merged_commit = null        # wiped
 merge_failures = []         # wiped
 eval_reports = []           # wiped
@@ -574,6 +597,7 @@ unit_attempts: {}                     # Cumulative per-unit attempt count
 blocked_units: []                     # Units blocked after MAX_UNIT_ATTEMPTS (3)
 replan_count: 0                       # Number of REPLANs executed (max 1 — survives resets)
 review_round: {}                      # { "unit_id": round_count } — per-unit review-fix counter, keyed by unit NOT changeset (max 2)
+session_map: {}                       # { changeset_id: session_id } — needed for dk_close before re-dispatch
 ```
 
 **Self-check before dk_push** (run this EVERY time before calling dk_push):
