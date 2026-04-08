@@ -269,7 +269,7 @@ tokens testing a broken app. Fix the build first.
 **If smoke test FAILS** → The app doesn't start or crashes on load. This is a build
 failure, not an eval failure. DO NOT dispatch evaluators. **DO NOT fix code locally
 with Write/Edit/Bash** — all fixes must go through dkod (dk_connect → dk_file_write →
-dk_submit → dk_verify → dk_merge → dk_push branch → git checkout -B). Instead:
+dk_submit → dk_verify → dk_approve → dk_merge → dk_push branch → git checkout -B). Instead:
 - Kill the dev server
 - Treat ALL units as failed with feedback: "App crashes on startup: <error details>"
 - **Execute Round Transition** (see the "Round Transition" block below): increment `round`,

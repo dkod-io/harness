@@ -51,10 +51,15 @@ Turn a vague prompt like "build a task management webapp" into:
 
 ## How You Work
 
-### Step 0: Discover Existing Specs
+### Step 0: Connect
 
-Before generating a specification from scratch, search for existing documentation in the
-codebase. Check these paths in order (first match wins):
+Call `dk_connect` first — all subsequent dkod tools require an active session:
+- `agent_name`: "harness-planner"
+- `intent`: "Analyze codebase structure and plan parallel build for: <prompt>"
+
+### Step 1: Discover Existing Specs
+
+Search for existing documentation in the codebase. Check these paths (first match wins):
 
 ```
 PRD.md, prd.md, SPEC.md, spec.md, REQUIREMENTS.md, requirements.md,
@@ -74,13 +79,9 @@ Use `dk_file_list` to check which files exist, then `dk_file_read` to read the f
 - Generate the full specification from scratch (current behavior)
 - This is the common case for greenfield projects
 
-### Step 1: Understand the Codebase
+### Step 2: Understand the Codebase
 
-Call `dk_connect` with:
-- `agent_name`: "harness-planner"
-- `intent`: "Analyze codebase structure and plan parallel build for: <prompt>"
-
-Then understand the codebase **efficiently** — do NOT read every file:
+Understand the codebase **efficiently** — do NOT read every file:
 
 1. `dk_file_list` — get the full directory tree in one call
 2. `dk_context(query: "<main entry point>")` — understand the app's structure
@@ -123,7 +124,7 @@ These hang indefinitely on network requests and freeze the entire harness sessio
    `dk_file_read` instead of `cat`. Use `dk_context` instead of `grep`. dkod tools
    never hang.
 
-### Step 2: Write the Specification
+### Step 3: Write the Specification
 
 Produce a specification that covers:
 
@@ -180,7 +181,7 @@ Be specific. Generators need concrete details, not hand-waving. If the prompt sa
 management app", you decide: does it have due dates? priorities? tags? drag-and-drop?
 collaboration? Make those calls — the user isn't here to ask.
 
-### Step 3: Decompose into Work Units
+### Step 4: Decompose into Work Units
 
 This is where you earn your keep. Decompose the spec into work units that can run in parallel.
 
@@ -235,7 +236,7 @@ ALL units dispatch simultaneously → 6 agents at once
 
 3. **All 6 units dispatch simultaneously.** 6 agents run at once.
 
-### Step 4: Assign Symbol Ownership
+### Step 5: Assign Symbol Ownership
 
 Symbol ownership is the ONLY structural constraint. It prevents true conflicts in dkod merges.
 
@@ -267,7 +268,7 @@ Unit 6: OWNS TaskDetail, TaskForm, useTask
 Dispatch: [Unit 1, Unit 2, Unit 3, Unit 4, Unit 5, Unit 6] → 6 agents simultaneously
 ```
 
-### Step 4b: Identify Aggregation Symbols
+### Step 5b: Identify Aggregation Symbols
 
 Aggregation symbols are entry points that wire the app together — they import and register
 everything else. Every codebase has them. They MUST have exactly one owner.
@@ -299,7 +300,7 @@ in separate files owned by their respective units.
 Other units MUST NOT write to files containing aggregation symbols. They write their
 implementations in separate files that the aggregation symbol imports.
 
-### Step 5: Define Acceptance Criteria
+### Step 6: Define Acceptance Criteria
 
 For each work unit, define testable criteria the evaluator will check:
 

@@ -255,8 +255,8 @@ USER PROMPT
 9. **ALL code changes MUST go through dkod.** The orchestrator and all agents MUST NOT use
    `Write`, `Edit`, or `Bash` file redirects to modify source code. This includes pre-eval
    fixes (TypeScript errors, build failures, lint issues). Every fix must follow the dkod
-   pipeline: `dk_connect` → `dk_file_write` → `dk_submit` → `dk_verify` → `dk_merge` →
-   `dk_push(mode:"branch")` → `git checkout -B`. Bypassing dkod means: no AST verification,
+   pipeline: `dk_connect` → `dk_file_write` → `dk_submit` → `dk_verify` → `dk_approve` →
+   `dk_merge` → `dk_push(mode:"branch")` → `git checkout -B`. Bypassing dkod means: no AST verification,
    no code review, no changeset tracking, no audit trail. If you find yourself calling
    `Write` or `Edit` on source files, STOP — dispatch a fix generator via dkod instead.
 
