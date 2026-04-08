@@ -329,6 +329,8 @@ for each work_unit in active_units:
     name: "evaluator-<unit-id>"
   )
   // WAIT for this evaluator to complete before dispatching the next
+  // Output progress after each evaluator completes:
+  // > Evaluator **[unit-name]** complete — X/Y criteria passed. Progress: **N/M eval reports collected.**
 
 // After all unit evaluators, run the integration evaluator:
 Agent(
