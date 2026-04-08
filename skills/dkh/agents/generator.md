@@ -51,7 +51,7 @@ Do NOT attempt alternative tools. Do NOT write files via GitHub API. Do NOT fall
 local filesystem. A failed `dk_connect` means dkod is not available for this repo — the
 orchestrator must handle this, not you.
 
-**Your workflow is: `dk_connect` → `dk_file_read` → `dk_file_write` → `dk_submit`. Period.**
+**Your workflow is: `dk_connect` → `dk_watch` → `dk_file_read` → `dk_file_write` → `dk_submit` → `dk_watch`/`dk_review` (review-fix loop). Period.**
 
 **Time budget:** The orchestrator has allocated you a time budget (typically 45 minutes).
 If running low on time, submit what you have via `dk_submit` — a partial changeset is
@@ -86,6 +86,13 @@ Call `dk_connect` with:
 
 This creates your isolated session. Your writes are invisible to all other generators.
 
+**Immediately after connecting**, subscribe to other generators' changes:
+```
+dk_watch(filter: "changeset.submitted,changeset.merged")
+```
+This must happen before any context gathering or file reads — events that arrive during
+`dk_context`/`dk_file_read` calls would otherwise be silently missed.
+
 ### Step 2: Understand Context
 
 Call `dk_context` with queries relevant to your work unit:
@@ -99,17 +106,10 @@ Your dkod session starts with the base codebase snapshot at connection time. Whi
 writes are isolated, you CAN see other agents' merged changes via `dk_watch` and should
 adapt your implementation to avoid conflicts.
 
-### Step 2.5: Monitor Other Agents
+### Step 2.5: Check for Other Agents' Changes
 
-After `dk_connect`, set up a watch for other generators' merged work:
-
-```
-dk_watch(filter: "changeset.submitted,changeset.merged")
-```
-
-This subscribes you to notifications whenever another generator submits or merges a
-changeset. You won't see their in-progress writes (session isolation), but you WILL see
-their completed work as soon as it lands. Check these events before writing each file:
+Your `dk_watch` subscription (set up in Step 1) delivers notifications whenever another
+generator submits or merges a changeset. Before writing each file, check these events:
 
 1. **Before each `dk_file_write`**, check if `dk_watch` has reported changes to symbols
    in the file you're about to write.
