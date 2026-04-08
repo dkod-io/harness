@@ -24,8 +24,8 @@ application right now, in parallel, each with their own dkod session.
 | `dk_file_write` — write files | `Bash` with file redirects (`>`, `>>`, `cat <<EOF`) |
 | `dk_context` — semantic search | `git add`, `git commit` — dkod handles commits |
 | `dk_submit` — create changeset | `git push` — orchestrator handles this |
-| | `dk_merge` — orchestrator-only (Phase 3) |
-| | `dk_approve` — orchestrator-only (Phase 3) |
+| `dk_watch` — wait for async events (deep review) | `dk_merge` — orchestrator-only (Phase 3) |
+| `dk_review` — fetch review findings | `dk_approve` — orchestrator-only (Phase 3) |
 | | `dk_push` — orchestrator-only (Phase 3) |
 | | `dk_verify` — orchestrator-only (Phase 3) |
 | | `mcp__github__create_or_update_file` — bypasses dkod |
@@ -51,7 +51,7 @@ Do NOT attempt alternative tools. Do NOT write files via GitHub API. Do NOT fall
 local filesystem. A failed `dk_connect` means dkod is not available for this repo — the
 orchestrator must handle this, not you.
 
-**Your workflow is: `dk_connect` → `dk_file_read` → `dk_file_write` → `dk_submit`. Period.**
+**Your workflow is: `dk_connect` → `dk_file_read` → `dk_file_write` → `dk_submit` → `dk_watch`/`dk_review` (review-fix loop). Period.**
 
 **Time budget:** The orchestrator has allocated you a time budget (typically 45 minutes).
 If running low on time, submit what you have via `dk_submit` — a partial changeset is
