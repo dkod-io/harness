@@ -111,6 +111,11 @@ Proceed to Phase 1.
 
 ### PHASE 1 — PLAN
 
+**Before spawning the planner, output this message to the user:**
+> 🔄 **Phase 1: Plan** — Spawning the planner agent to analyze the codebase and produce
+> parallel work units. This typically takes 3-5 minutes. Please wait — no action needed
+> until the plan is ready.
+
 Spawn a single planner agent:
 
 ```
@@ -168,6 +173,11 @@ Agent(
 
 Wait for all generators to complete.
 
+**As each generator completes**, output a progress line:
+> Generator **[unit-name]** complete — changeset `[id]`, self-score [X/5]. Progress: **N/M generators done.**
+
+This keeps the user informed as changesets arrive instead of showing a stale empty state for the entire build phase.
+
 **═══ GATE 2 CHECK ═══**
 Before proceeding, verify:
 - [ ] Every generator has reported back
@@ -175,7 +185,8 @@ Before proceeding, verify:
 - [ ] `changeset_ids` has one entry per unit in `active_units`
 
 **If gate fails** → re-dispatch crashed generators. Do NOT proceed until all have submitted.
-**If gate passes** → set `changeset_ids = [...]`. Proceed to Phase 3.
+**If gate passes** → set `changeset_ids = [...]`. Output the updated state block showing all collected changeset_ids:
+> **Gate 2 PASSED** — `changeset_ids: [id1, id2, ...]`, `active_units: [N units]`. Proceeding to Phase 3 (Land).
 
 ---
 
@@ -188,6 +199,8 @@ Before proceeding, verify:
 3. **Approve** — `dk_approve` each verified changeset
 4. **Merge sequentially** — `dk_merge` each changeset one at a time. Merge order does not
    matter — all units are independent.
+   **After each merge**, output a progress line:
+   > Merged changeset `[id]` for unit **[name]**. Progress: **N/M merged.**
 
 #### Review Gate (advisory, max 2 rounds)
 
@@ -227,6 +240,9 @@ But if ZERO changesets merged, that's a hard block.
 
 **If zero merges** → re-dispatch generators with error context.
 **If some merged** → update `merged_commit = <hash>`, record `merge_failures`.
+Output the updated state block:
+> **Gate 3 PASSED** — `merged_commit: [hash]`, `merge_failures: [list or empty]`. Proceeding to Phase 4 (Eval).
+
 Proceed to Phase 4. DO NOT PUSH. DO NOT ASK THE USER.
 
 ---
