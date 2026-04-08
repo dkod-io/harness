@@ -267,7 +267,9 @@ tokens testing a broken app. Fix the build first.
 - [ ] No fatal JavaScript errors in console (warnings are OK, errors are NOT)
 
 **If smoke test FAILS** → The app doesn't start or crashes on load. This is a build
-failure, not an eval failure. DO NOT dispatch evaluators. Instead:
+failure, not an eval failure. DO NOT dispatch evaluators. **DO NOT fix code locally
+with Write/Edit/Bash** — all fixes must go through dkod (dk_file_write → dk_submit →
+dk_verify → dk_merge → dk_push branch → git checkout -B). Instead:
 - Kill the dev server
 - Treat ALL units as failed with feedback: "App crashes on startup: <error details>"
 - **Execute Round Transition** (see the "Round Transition" block below): increment `round`,
@@ -290,6 +292,8 @@ failure, not an eval failure. DO NOT dispatch evaluators. Instead:
 **⚠️ dk_verify (Phase 3) is NOT evaluation. It runs lint/type-check/test.**
 **⚠️ Evaluation means: test with chrome-devtools, score criteria with evidence.**
 **⚠️ You CANNOT call dk_push until eval_reports is populated with REAL evidence.**
+**⚠️ Do NOT fix TypeScript errors, build errors, or lint issues locally with Write/Edit.**
+**⚠️ If the code has errors, go BACK — dispatch a fix generator through dkod.**
 
 The dev server is already running from the smoke test. Do NOT start another one.
 

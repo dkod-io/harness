@@ -80,12 +80,25 @@ Call `dk_connect` with:
 - `agent_name`: "harness-planner"
 - `intent`: "Analyze codebase structure and plan parallel build for: <prompt>"
 
-Then call `dk_context` to understand:
-- What already exists (if this is an existing repo)
-- Language ecosystem, framework conventions
-- Existing patterns to follow
+Then understand the codebase **efficiently** — do NOT read every file:
 
-Call `dk_file_list` to see the current file structure.
+1. `dk_file_list` — get the full directory tree in one call
+2. `dk_context(query: "<main entry point>")` — understand the app's structure
+3. Read ONLY these key files with `dk_file_read`:
+   - Entry points: `main.tsx`, `App.tsx`, `index.ts`, `lib.rs`, `main.py`
+   - Config: `package.json`, `tsconfig.json`, `Cargo.toml`, `vite.config.ts`
+   - Types/schemas: shared type files, database schemas, API route definitions
+   - Existing spec files (from Step 0)
+4. Use `dk_context` for everything else — semantic search returns symbol definitions
+   without reading entire files
+
+**Do NOT read implementation files** (components, utils, services) unless you need to
+understand a specific symbol. `dk_context` gives you symbol signatures and call graphs
+without consuming tool calls on full file reads.
+
+**Budget: max 15 dk_file_read calls.** If the codebase has 30+ files, you MUST rely on
+`dk_context` for understanding implementation details. The file tree from `dk_file_list`
++ entry points + types is sufficient for decomposition.
 
 For greenfield projects (empty repo), skip context and go straight to specification.
 
