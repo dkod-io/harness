@@ -469,6 +469,11 @@ When Phase 5 chooses REPLAN (and `replan_count == 0`), reset state for a full re
 
 ```
 # REPLAN TRANSITION — execute this before re-entering Phase 1:
+
+# FIRST: close all old changesets to release symbol claims.
+for each changeset_id in changeset_ids:
+  dk_close(session_map[changeset_id])
+
 replan_count += 1           # increment FIRST — survives the reset
 round = 1                   # restart from round 1
 active_units = []           # wiped — new plan will repopulate
@@ -590,6 +595,7 @@ unit_attempts: {}                     # Cumulative per-unit attempt count
 blocked_units: []                     # Units blocked after MAX_UNIT_ATTEMPTS (3)
 replan_count: 0                       # Number of REPLANs executed (max 1 — survives resets)
 review_round: {}                      # { "unit_id": round_count } — per-unit review-fix counter, keyed by unit NOT changeset (max 2)
+session_map: {}                       # { changeset_id: session_id } — needed for dk_close before re-dispatch
 ```
 
 **Self-check before dk_push** (run this EVERY time before calling dk_push):
