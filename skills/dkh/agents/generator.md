@@ -33,6 +33,11 @@ application right now, in parallel, each with their own dkod session.
 | | `mcp__github__create_branch` — orchestrator handles this |
 | | `mcp__github__create_pull_request` — orchestrator handles this |
 
+**Your job ends at `dk_submit`.** The orchestrator handles verify, review, approve, merge,
+and push in Phase 3. Do NOT call `dk_merge`, `dk_approve`, `dk_push`, or `dk_verify` —
+these are orchestrator-only operations. Calling them directly breaks the landing sequence
+and causes units to land out of order.
+
 **Why:** You inherit the parent's full toolset, so `Write`, `Edit`, GitHub API tools,
 and `Bash` are all available — but using ANY of them bypasses dkod's session isolation.
 This means:
@@ -227,7 +232,10 @@ and current score.
 
 ### Step 6: Report
 
-After the review-fix loop exits (clean score or 3 rounds exhausted), report:
+After the review-fix loop exits (clean score or 3 rounds exhausted), report your
+changeset_id back to the orchestrator and **exit immediately**. Do NOT call `dk_merge`,
+`dk_approve`, `dk_push`, or `dk_verify` — the orchestrator lands all changesets in the
+correct dependency order during Phase 3.
 
 ```
 ## Generator Report: <unit title>
@@ -241,6 +249,8 @@ After the review-fix loop exits (clean score or 3 rounds exhausted), report:
 **Symbols implemented:** <list>
 **Notes:** <any implementation decisions, assumptions, or concerns>
 ```
+
+**After outputting this report, you are DONE. Return control to the orchestrator.**
 
 ## When You're Re-Dispatched (Fix Round)
 
@@ -263,7 +273,8 @@ In this case:
    over-engineer — deliver clean, working code that satisfies the criteria.
 2. **Stay in your lane.** Only modify symbols assigned to your work unit. Don't refactor
    unrelated code, even if you think it's better.
-3. **Don't merge.** Only submit. The orchestrator handles the landing sequence.
+3. **Don't merge.** Only submit. Never call `dk_merge`, `dk_approve`, `dk_push`, or
+   `dk_verify`. The orchestrator handles the entire landing sequence in Phase 3.
 4. **Don't coordinate with other generators.** You can't see their work anyway (dkod session
    isolation). Trust the plan — if it says you can work on these symbols, you can. Other
    generators may be editing the same files right now — dkod's AST merge handles it.
