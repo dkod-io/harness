@@ -17,13 +17,17 @@ application right now, in parallel, each with their own dkod session.
 
 **You MUST use dkod tools for ALL code changes. Local filesystem tools are FORBIDDEN.**
 
-| REQUIRED (use these) | FORBIDDEN (never use these for code) |
+| REQUIRED (use these) | FORBIDDEN (never use these) |
 |---------------------|-------------------------------------|
 | `dk_connect` — start your session | `Write` tool — bypasses dkod |
 | `dk_file_read` — read files | `Edit` tool — bypasses dkod |
 | `dk_file_write` — write files | `Bash` with file redirects (`>`, `>>`, `cat <<EOF`) |
 | `dk_context` — semantic search | `git add`, `git commit` — dkod handles commits |
 | `dk_submit` — create changeset | `git push` — orchestrator handles this |
+| | `dk_merge` — orchestrator-only (Phase 3) |
+| | `dk_approve` — orchestrator-only (Phase 3) |
+| | `dk_push` — orchestrator-only (Phase 3) |
+| | `dk_verify` — orchestrator-only (Phase 3) |
 | | `mcp__github__create_or_update_file` — bypasses dkod |
 | | `mcp__github__push_files` — bypasses dkod |
 | | `mcp__github__create_branch` — orchestrator handles this |
@@ -163,7 +167,12 @@ Call `dk_submit` with your work unit title as `intent`. This is **round 1**.
 The submit response includes `review_summary` with a local code review score (1-5) and
 findings. You now own the review-fix lifecycle — do NOT just report the score and exit.
 
+**Output status messages so the user can track progress in the dkod-app UI.**
+
 **Run the review-fix loop (max 3 rounds):**
+
+Before entering the loop, output:
+> Starting review-fix loop (max 3 rounds)
 
 ```
 round = 1   (the dk_submit you just did)
@@ -172,6 +181,7 @@ LOOP while round ≤ 3:
 
   # Check LOCAL review (inline with dk_submit response)
   if local review has severity:"error" findings:
+    OUTPUT: "Review-fix round {round}/3: fixing {N} findings (score: {score}/5)"
     fix the files
     round += 1
     if round > 3 → break
@@ -183,15 +193,27 @@ LOOP while round ≤ 3:
   dk_review(changeset_id) → get deep findings + score
 
   if score ≥ 4 AND no severity:"error" findings:
+    OUTPUT: "Review complete — score: {score}/5 after {round} round(s)"
     break  (changeset is clean)
 
   # Deep found issues — fix and re-submit
+  OUTPUT: "Review-fix round {round}/3: fixing {N} deep findings (score: {score}/5)"
   fix files based on deep findings
   round += 1
-  if round > 3 → break
+  if round > 3:
+    OUTPUT: "Max review rounds reached — final score: {score}/5"
+    break
   dk_submit(intent)
   # loop continues — re-check local before waiting for deep again
+
+# If loop exits at round 1 with a clean score (no findings at all):
+OUTPUT: "Review complete — score: {score}/5 after 1 round"
 ```
+
+**These status messages are mandatory.** They appear in the dkod-app activity feed and
+let the user know which review-fix round you're on, how many findings you're fixing, and
+when the loop ends. Always include the round number, total rounds (3), finding count,
+and current score.
 
 **Handling findings:**
 - Fix every `severity:"error"` finding — these are blocking (security, logic errors)
