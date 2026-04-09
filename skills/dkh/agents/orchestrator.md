@@ -213,17 +213,23 @@ Wait for all generators to complete.
   Output: `Generator **[unit-name]** complete — session [sid], changeset [id], score [X/5]. Progress: N/M done.`
 
 - **Status: conflict_blocked** → the generator could NOT submit due to unresolved
-  conflict_warnings. Record its session_id (from the report) but NO changeset_id.
-  **Immediately call `dk_close(session_id)`** to release its symbol claims — without
-  this, the re-dispatched generator will self-conflict on the same file.
+  conflict_warnings BEFORE its first dk_submit. No changeset_id exists.
+  Record its session_id. **Immediately call `dk_close(session_id)`** to release claims.
   Output: `Generator **[unit-name]** CONFLICT_BLOCKED — closing session [sid], will re-dispatch. Progress: N/M done.`
+
+- **Status: conflict_blocked_after_submit** → the generator submitted successfully but
+  hit an unresolvable conflict during the review-fix loop. It HAS a valid changeset_id
+  from the earlier submit. Record BOTH session_id and changeset_id in `session_map`.
+  **Treat this as a successful submit for Phase 3** — the earlier changeset is valid
+  and may merge cleanly (the conflict was on the review-fix rewrite, not the original).
+  Output: `Generator **[unit-name]** conflict during review-fix — using earlier changeset [id], score [X/5]. Progress: N/M done.`
 
 - **No report / crashed** → record whatever session_id is available from the dispatch.
 
 **═══ GATE 2 CHECK ═══**
 Before proceeding, verify:
 - [ ] Every generator has reported back
-- [ ] Count generators with `status: submitted` and a changeset_id
+- [ ] Count generators with `status: submitted` or `status: conflict_blocked_after_submit` (have changeset_id)
 - [ ] Count generators with `status: conflict_blocked` (no changeset_id)
 
 **If any generators are conflict_blocked:**
@@ -243,7 +249,7 @@ Before proceeding, verify:
 - If they have a recorded session_id → call `dk_close(session_id)` to release claims
 - Re-dispatch. Do NOT proceed until all have submitted.
 
-**If gate passes** (all generators have status: submitted with changeset_ids):
+**If gate passes** (all generators have status: submitted or conflict_blocked_after_submit, all have changeset_ids):
 → set `changeset_ids = [...]` and verify `session_map` has an entry for each changeset_id.
 > **Gate 2 PASSED** — `changeset_ids: [id1, id2, ...]`, `active_units: [N units]`. Proceeding to Phase 3 (Land).
 
