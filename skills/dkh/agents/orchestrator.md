@@ -89,13 +89,23 @@ session_map: {}             # { changeset_id: session_id } — populated from ea
 
 ---
 
-### PRE-FLIGHT — VERIFY DKOD CONNECTION
+### PRE-FLIGHT — DETERMINE REPO AND VERIFY DKOD CONNECTION
 
-**Before ANYTHING else**, verify dkod is connected to the target repo:
+**Before ANYTHING else**, determine the target repository:
+
+1. **Check if the prompt contains `[dkod repo: <owner/repo>]`** — if present, use that
+   exact value as the repo name. This is the authoritative source — it comes from the
+   dkod workspace configuration and is always correct.
+2. **If no tag**, fall back to `git remote get-url origin` in the cwd and extract `owner/repo`.
+3. **NEVER guess the owner from the GitHub username or directory name.**
+   The repo might be under an org (`dkod-io/`) not the user's personal account (`haim-ari/`).
+   Always use the `[dkod repo:]` tag or the git remote — never invent an owner.
+
+Then verify dkod is connected:
 
 ```
 dk_connect(
-  codebase: "<owner/repo>",
+  codebase: "<owner/repo from step above>",
   agent_name: "preflight",
   intent: "Verify dkod connection before starting harness"
 )
