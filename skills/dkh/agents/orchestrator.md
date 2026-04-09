@@ -172,7 +172,9 @@ Agent(
           ONLY these spec sections: Stack, Design Direction, Data Model, API Surface +
           THIS generator's work unit ONLY (not other units) +
           Aggregation Symbols table (so generators know what NOT to touch) +
-          "Report BOTH session_id AND changeset_id when done.">,
+          "CRITICAL: Use dk_connect → dk_file_write → dk_submit ONLY.
+           NEVER use Write, Edit, or Bash to create/modify source files.
+           Report BOTH session_id AND changeset_id when done.">,
   description: "Build: <unit title>",
   name: "generator-<unit-id>"
 )
@@ -335,8 +337,10 @@ related or test similar areas. Each evaluator receives the combined criteria for
 and scores all of them. The final evaluator always handles overall/integration criteria.
 
 ```
-// Group active_units into batches of 2-3, then dispatch ONE AT A TIME:
-batches = chunk(active_units, batch_size=min(3, ceil(len(active_units)/2)))
+// Group active_units into batches of 2-3 units each. Never batch_size=1 unless
+// there is only 1 unit. For N=2: one batch of 2. For N=3: one batch of 3.
+// For N=4-6: two batches. For N=7+: three batches. Target: ceil(N/3) batches.
+batches = chunk(active_units, batch_size=3)  // last batch may be smaller
 
 for each batch in batches:
   Agent(
