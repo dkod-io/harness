@@ -237,7 +237,12 @@ LOOP while round ≤ 3:
   # Check LOCAL review (inline with dk_submit response)
   if local review has severity:"error" findings:
     OUTPUT: "Review-fix round {round}/3: fixing {N} findings (score: {score}/5)"
-    fix the files
+    fix the files via dk_file_write
+    # ═══ CONFLICT CHECK — same rule as Step 3 ═══
+    # Every dk_file_write in the review-fix loop MUST be checked for
+    # conflict_warnings. If present, resolve BEFORE re-submitting.
+    # The hard gate applies here too — no exceptions for review fixes.
+    if any dk_file_write returned conflict_warnings → resolve (see Step 3)
     round += 1
     if round > 3 → break
     dk_submit again
@@ -253,7 +258,9 @@ LOOP while round ≤ 3:
 
   # Deep found issues — fix and re-submit
   OUTPUT: "Review-fix round {round}/3: fixing {N} deep findings (score: {score}/5)"
-  fix files based on deep findings
+  fix files based on deep findings via dk_file_write
+  # ═══ CONFLICT CHECK — same rule as Step 3 ═══
+  if any dk_file_write returned conflict_warnings → resolve (see Step 3)
   round += 1
   if round > 3:
     OUTPUT: "Max review rounds reached — final score: {score}/5"
