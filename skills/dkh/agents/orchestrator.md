@@ -28,7 +28,7 @@ If an agent hasn't reported back within its time budget, treat it as a crash:
 |-------|---------|-------------------|
 | Planner | 30 minutes | Re-dispatch planner (up to 2 retries) |
 | Generator | 45 minutes | Record unit as failed, increment unit_attempts, re-dispatch in fix round |
-| Evaluator | 30 minutes | Re-dispatch evaluator for same criteria |
+| Evaluator | 30 min per unit in batch (e.g., 60 min for 2-unit batch) | Re-dispatch evaluator batch for same criteria |
 
 When dispatching any agent, include the time budget in the prompt:
 "You have N minutes. If running low on time, submit what you have — a partial result
@@ -168,16 +168,20 @@ Dispatch ALL generators in `active_units` simultaneously in a single message:
 Agent(
   subagent_type: "general-purpose",
   model: <generator model from active profile>,
-  prompt: <inject generator.md instructions + spec + this unit +
-          "CRITICAL: Use dk_connect → dk_file_write → dk_submit ONLY.
-           NEVER use Write, Edit, or Bash to create/modify source files.
-           NEVER use git commands. All code goes through dkod.
-           Report BOTH session_id AND changeset_id when done.">,
+  prompt: <inject generator.md instructions +
+          ONLY these spec sections: Stack, Design Direction, Data Model, API Surface +
+          THIS generator's work unit ONLY (not other units) +
+          Aggregation Symbols table (so generators know what NOT to touch) +
+          "Report BOTH session_id AND changeset_id when done.">,
   description: "Build: <unit title>",
   name: "generator-<unit-id>"
 )
 // ... one per unit in active_units
 ```
+
+**Do NOT send every unit's details to every generator.** Each generator only needs:
+the tech stack, design direction, data model, its own unit, and the aggregation table.
+Other units' acceptance criteria are noise that wastes context tokens.
 
 Wait for all generators to complete.
 
@@ -323,36 +327,38 @@ dk_submit → dk_verify → dk_approve → dk_merge → dk_push branch → git c
 
 The dev server is already running from the smoke test. Do NOT start another one.
 
-Then dispatch evaluators **sequentially** (one at a time), passing the already-running
-server URL. Evaluators MUST run sequentially because they share a single chrome-devtools
-browser session — parallel evaluators would race on `navigate_page`, `take_screenshot`,
-and `click` calls, corrupting each other's evidence.
+Dispatch evaluators **sequentially** (one at a time) — they share a single chrome-devtools
+browser session. Do NOT instruct evaluators to start their own dev server.
 
-Do NOT instruct evaluators to start their own dev server.
+**Batch units to minimize dispatches:** Group 2-3 work units per evaluator when units are
+related or test similar areas. Each evaluator receives the combined criteria for its batch
+and scores all of them. The final evaluator always handles overall/integration criteria.
 
 ```
-// Dispatch evaluators ONE AT A TIME — wait for each to complete before the next:
-for each work_unit in active_units:
+// Group active_units into batches of 2-3, then dispatch ONE AT A TIME:
+batches = chunk(active_units, batch_size=min(3, ceil(len(active_units)/2)))
+
+for each batch in batches:
   Agent(
     model: <evaluator model from active profile>,
-    prompt: <evaluator.md + spec + this unit's criteria + "The dev server is already
-             running at <SERVER_URL>. Do NOT start another dev server. Connect to
-             the running server and test via chrome-devtools. Score every criterion.
-             You have exclusive access to the browser — no other evaluator is running.">,
-    description: "Eval: <unit title>",
-    name: "evaluator-<unit-id>"
+    prompt: <evaluator.md +
+            ONLY these spec sections: Stack, Design Direction, Data Model, API Surface +
+            criteria for ALL units in this batch +
+            "The dev server is already running at <SERVER_URL>.
+             Do NOT start another dev server. You have exclusive browser access.
+             Score every criterion for all units in your batch.">,
+    description: "Eval: <batch unit titles>",
+    name: "evaluator-batch-<N>"
   )
-  // WAIT for this evaluator to complete before dispatching the next
-  // Output progress after each evaluator completes:
-  // > Evaluator **[unit-name]** complete — X/Y criteria passed. Progress: **N/M eval reports collected.**
+  // WAIT for completion before dispatching next batch
+  // > Evaluator batch **[N]** complete — X/Y criteria passed. Progress: **N/M batches done.**
 
-// After all unit evaluators, run the integration evaluator:
+// Final evaluator for overall/integration criteria:
 Agent(
   model: <evaluator model from active profile>,
-  prompt: <evaluator.md + spec + overall criteria + "The dev server is already
-           running at <SERVER_URL>. Do NOT start another dev server. Test
-           integration across all units. Verify the full application end-to-end.
-           You have exclusive access to the browser.">,
+  prompt: <evaluator.md + spec summary + overall criteria +
+           "Test integration across all units. Verify full app end-to-end.
+            Server at <SERVER_URL>. Exclusive browser access.">,
   description: "Eval: integration",
   name: "evaluator-integration"
 )
@@ -360,23 +366,24 @@ Agent(
 
 Wait for the integration evaluator to complete. Then stop the dev server.
 
-**Note on parallelism trade-off**: Sequential evaluation sacrifices speed for correctness.
-Each evaluator needs exclusive access to the chrome-devtools browser session to produce
-reliable evidence. This is the ONE phase where serialization is mandatory — all other
-phases (Build, Land) maximize parallelism as described in the Prime Directive.
+**Why batch?** Each evaluator dispatch includes the full evaluator.md instructions (~190 lines).
+Batching 2-3 units per evaluator cuts the number of dispatches (and thus instruction
+repetitions) by 50-66%, saving significant context tokens. The evaluator still tests every
+criterion — it just tests more criteria per session.
+
+**Why sequential?** Evaluators share chrome-devtools. Parallel evaluators would race on
+navigate/screenshot/click, corrupting evidence. This is the ONE phase where serialization
+is mandatory.
 
 **═══ GATE 4 CHECK ═══**
 Before proceeding, verify:
-- [ ] I have an eval report for EVERY work unit (not just some)
+- [ ] I have eval scores for EVERY work unit's criteria (across all batches)
 - [ ] I have an overall/integration eval report
-- [ ] Every acceptance criterion has a numeric score
-- [ ] Every score has evidence (screenshots, console output, HTTP responses)
-- [ ] **At least one screenshot exists in the eval evidence** — if zero screenshots,
-  the evaluator did not actually test the live app. That is a gate failure.
-- [ ] No criterion is unscored
+- [ ] Every acceptance criterion has a numeric score with evidence
+- [ ] **At least one screenshot exists in the eval evidence**
 - [ ] `eval_reports` is populated
 
-**If gate fails** → re-dispatch missing evaluators. Do NOT call dk_push.
+**If gate fails** → re-dispatch missing evaluator batch. Do NOT call dk_push.
 **If gate passes** → set `eval_reports = [...]`. Proceed to Phase 5.
 
 ---
@@ -579,30 +586,11 @@ Total rounds: {rounds}
 - **All generators fail**: Something is fundamentally wrong with the plan. Re-run the planner
   with "the previous plan produced implementations that all failed to build" and the error logs.
 
-## What You Track — Gate State
+## Self-Check Before dk_push
 
-Throughout the loop, maintain this state explicitly. If any field is null/empty when a
-gate check requires it, you have skipped a phase.
-
-```
-round: 1                          # Current round (1, 2, or 3)
-plan: <plan artifact>             # Set after Gate 1 passes
-active_units: [...]               # All units in round 1; only failed units in rounds 2+
-changeset_ids: []                 # Set after Gate 2 — one per unit in active_units
-merged_commit: null               # Set after Gate 3 — latest commit hash
-merge_failures: []                # Changesets that failed to merge (recorded, not blocking)
-eval_reports: []                  # Set after Gate 4 — MUST EXIST before dk_push
-overall_pass_rate: "X/Y"          # Computed from eval_reports
-unit_attempts: {}                     # Cumulative per-unit attempt count
-blocked_units: []                     # Units blocked after MAX_UNIT_ATTEMPTS (3)
-replan_count: 0                       # Number of REPLANs executed (max 1 — survives resets)
-review_round: {}                      # { "unit_id": round_count } — per-unit review-fix counter, keyed by unit NOT changeset (max 2)
-session_map: {}                       # { changeset_id: session_id } — needed for dk_close before re-dispatch
-```
-
-**Self-check before dk_push** (run this EVERY time before calling dk_push):
-1. "Did the smoke test PASS? Did the app actually start and load? If NO → STOP. Fix the build first."
-2. "Is `eval_reports` populated with scores for every criterion? If NO → STOP. Phase 4 incomplete."
-3. "Do the eval reports contain at least one screenshot? If NO → STOP. The app was never tested live."
-4. "Am I in Phase 5? If NO → STOP. dk_push is only allowed in Phase 5."
+Run this EVERY time before calling dk_push:
+1. "Did the smoke test PASS? If NO → STOP."
+2. "Is `eval_reports` populated with scores for every criterion? If NO → STOP."
+3. "Do the eval reports contain at least one screenshot? If NO → STOP."
+4. "Am I in Phase 5? If NO → STOP."
 
