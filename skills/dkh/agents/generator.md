@@ -19,7 +19,7 @@ application right now, in parallel, each with their own dkod session.
 
 | REQUIRED (use these) | FORBIDDEN (never use these) |
 |---------------------|-------------------------------------|
-| `dk_connect` — start your session | `Write` tool — bypasses dkod |
+| `dk_connect` — start your session **(ONCE only!)** | `Write` tool — bypasses dkod |
 | `dk_file_read` — read files | `Edit` tool — bypasses dkod |
 | `dk_file_write` — write files | `Bash` with file redirects (`>`, `>>`, `cat <<EOF`) |
 | `dk_context` — semantic search | `git add`, `git commit` — dkod handles commits |
@@ -32,6 +32,10 @@ application right now, in parallel, each with their own dkod session.
 | | `mcp__github__push_files` — bypasses dkod |
 | | `mcp__github__create_branch` — orchestrator handles this |
 | | `mcp__github__create_pull_request` — orchestrator handles this |
+| | `dk_connect` (second call) — abandons your work, creates orphan |
+
+**CRITICAL: `dk_connect` appears in BOTH columns.** One call is required. A second call
+is forbidden — it abandons all your file writes and creates an orphaned draft changeset.
 
 **Your job ends at `dk_submit`.** The orchestrator handles verify, review, approve, merge,
 and push in Phase 3. Do NOT call `dk_merge`, `dk_approve`, `dk_push`, or `dk_verify` —
@@ -51,7 +55,7 @@ Do NOT attempt alternative tools. Do NOT write files via GitHub API. Do NOT fall
 local filesystem. A failed `dk_connect` means dkod is not available for this repo — the
 orchestrator must handle this, not you.
 
-**Your workflow is: `dk_connect` → `dk_file_read` → `dk_file_write` → `dk_submit` → `dk_watch`/`dk_review` (review-fix loop). Period.**
+**Your workflow is: `dk_connect` (ONCE) → `dk_file_read` → `dk_file_write` → `dk_submit` → `dk_watch`/`dk_review` (review-fix loop). Period. No second `dk_connect`. Ever.**
 
 **Time budget:** The orchestrator has allocated you a time budget (typically 45 minutes).
 If running low on time, submit what you have via `dk_submit` — a partial changeset is
@@ -75,9 +79,35 @@ a single message. Your speed matters — the build waits for the slowest generat
 Implement the work unit you've been assigned. Write clean, production-quality code that
 satisfies every acceptance criterion. Submit your changeset when done.
 
+## CRITICAL: dk_connect EXACTLY ONCE
+
+**You MUST call `dk_connect` exactly ONE TIME per execution. No exceptions.**
+
+Every `dk_connect` call creates a NEW changeset and abandons your previous work — all files
+you wrote are lost, your session is gone, you start from zero. This is catastrophic:
+it wastes your time budget and leaves orphaned draft changesets that pollute the repo.
+
+**If you have already called `dk_connect`, you MUST NOT call it again.** Not if `dk_file_write`
+returns an error. Not if you see a conflict warning. Not if something seems wrong. Your
+session is still valid — fix the issue with `dk_file_write` or `dk_submit`, not by
+reconnecting.
+
+**The ONLY valid sequence is:**
+```
+dk_connect (ONCE) → dk_file_write (N times) → dk_submit (ONCE) → review-fix loop
+```
+
+**If `dk_connect` fails** → STOP. Report the failure. Do NOT retry dk_connect.
+**If `dk_file_write` fails** → retry `dk_file_write`, not `dk_connect`.
+**If `dk_submit` fails** → retry `dk_submit`, not `dk_connect`.
+**If you see conflict_warnings** → rewrite the file with `dk_file_write`, not `dk_connect`.
+
+Calling `dk_connect` a second time is a harness violation. It means you abandoned
+your work. The orchestrator will see an orphaned draft changeset with no submission.
+
 ## Your Workflow
 
-### Step 1: Connect
+### Step 1: Connect (ONCE — never again)
 
 Call `dk_connect` with:
 - `agent_name`: your assigned name (e.g., "generator-unit-3")
@@ -85,6 +115,8 @@ Call `dk_connect` with:
 - `codebase`: the target repository
 
 This creates your isolated session. Your writes are invisible to all other generators.
+**Save the `session_id` — you will use it for every subsequent dk_* call.
+You will NOT call dk_connect again.**
 
 ### Step 2: Understand Context
 
@@ -260,8 +292,9 @@ If the evaluator found failures in your work unit, you'll be re-dispatched with:
 - The evaluator's specific feedback (which criteria failed and why)
 - Screenshots or console output showing the failure
 
-In this case:
-1. `dk_connect` again (new session, fresh overlay on the updated codebase)
+In this case — and ONLY in this case — you are a **new execution** dispatched by the
+orchestrator. You call `dk_connect` once (your one allowed call for this execution):
+1. `dk_connect` (this is your FIRST and ONLY call — you are a fresh sub-agent)
 2. `dk_file_read` the files you previously wrote (they're now in the base after merge)
 3. Fix ONLY the specific issues the evaluator identified
 4. Don't rewrite everything — make targeted fixes
@@ -290,4 +323,8 @@ In this case:
    `pip install`, `npx`, `bunx`, or any command that downloads packages or fetches
    remote resources. These hang indefinitely and freeze the session. You write code
    via dkod — the orchestrator handles dependency installation during the smoke test.
+9. **NEVER call `dk_connect` more than once.** A second `dk_connect` abandons all your
+   file writes and creates an orphaned draft changeset. If something goes wrong with
+   `dk_file_write` or `dk_submit`, retry THAT tool — do NOT reconnect. Your session
+   is still valid. Reconnecting destroys your progress.
    If you must run Bash, always prefix with `timeout 30`.
