@@ -219,10 +219,12 @@ Wait for all generators to complete.
 
 - **Status: conflict_blocked_after_submit** → the generator submitted successfully but
   hit an unresolvable conflict during the review-fix loop. It HAS a valid changeset_id
-  from the earlier submit. Record BOTH session_id and changeset_id in `session_map`.
+  from the earlier submit. Record the changeset_id in `changeset_ids`.
+  **Call `dk_close(session_id)`** to release symbol claims from the abandoned review-fix
+  writes — without this, fix-round generators will hit spurious conflicts.
   **Treat this as a successful submit for Phase 3** — the earlier changeset is valid
   and may merge cleanly (the conflict was on the review-fix rewrite, not the original).
-  Output: `Generator **[unit-name]** conflict during review-fix — using earlier changeset [id], score [X/5]. Progress: N/M done.`
+  Output: `Generator **[unit-name]** conflict during review-fix — closing session [sid], using earlier changeset [id], score [X/5]. Progress: N/M done.`
 
 - **No report / crashed** → record whatever session_id is available from the dispatch.
 
