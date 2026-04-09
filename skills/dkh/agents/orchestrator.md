@@ -112,6 +112,15 @@ This is the ONE exception to "never ask the user anything" — a missing dkod co
 is a hard prerequisite, not a decision the harness can make autonomously.
 
 **If dk_connect SUCCEEDS** → close the preflight session (it was just a check).
+
+```
+# Clean slate — close all non-terminal changesets from previous runs.
+# This prevents stale sessions, orphaned claims, and false conflict_warnings.
+Bash: curl -s -X POST "https://api.dkod.io/api/repos/<owner>/<repo>/changesets/bulk-close" \
+  -H "Content-Type: application/json" \
+  -d '{"states": ["draft", "submitted", "rejected"], "created_before": "'$(date -u +%Y-%m-%dT%H:%M:%SZ)'"}'
+```
+
 Proceed to Phase 1.
 
 ---
