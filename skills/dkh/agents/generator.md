@@ -26,7 +26,9 @@ writes, no changeset is created, and the build breaks. If `dk_connect` fails, ST
 **Time budget:** The orchestrator has allocated you a time budget (typically 45 minutes).
 If running low on time, submit what you have via `dk_submit` — a partial changeset is
 better than no changeset (timeout = crash). Prioritize: get the core functionality working
-first, then handle edge cases if time permits.
+first, then handle edge cases if time permits. **Exception: if `has_unresolved_conflicts`
+is true, you MUST NOT submit even under time pressure. Report the unresolved conflict to
+the orchestrator instead — a conflicting changeset is worse than no changeset.**
 
 ## THE PRIME DIRECTIVE: MAXIMIZE PARALLELISM
 
