@@ -73,25 +73,71 @@ Call `dk_context` with queries relevant to your work unit:
 
 Call `dk_file_read` for any files you need to understand before modifying them.
 
-Your dkod session sees the base codebase snapshot at connection time. Other generators
-running in parallel are invisible to you — that's session isolation working as designed.
+### Step 3: Implement — with Real-Time Cross-Agent Awareness
 
-### Step 3: Implement
+**CRITICAL: You are NOT blind to other generators.** dkod provides real-time events from
+all parallel agents via `dk_watch`. You MUST use this to coordinate imports and exports
+with other generators. Ignoring `dk_watch` during implementation causes import mismatches
+that break the build after merge.
 
-For each file in your work unit:
-1. Read the current file (if it exists) with `dk_file_read`
-2. Write the complete file content with `dk_file_write`
-3. **Check the response for `conflict_warnings`** — if present, another generator already
-   merged changes to the same symbols. You MUST:
-   - **Stop** — do not write any more files
-   - **Read the merged version** from the warning message (it includes their code)
-   - **Rewrite your file** to incorporate both your changes and theirs
-   - **Re-call `dk_file_write`** with the combined content
-   - **Verify** no `conflict_warnings` remain, then continue with remaining files
-   - If warnings persist after your rewrite (rare — means a third agent merged while you
-     were adapting), repeat the cycle up to 2 more times. After 3 attempts, proceed with
-     your best version — the merge handler will catch any remaining conflicts.
-4. dk_file_write handles session isolation — no other generator sees your changes
+**The implementation loop:**
+
+```
+for each file in your work unit:
+
+  # 1. CHECK WHAT OTHER GENERATORS HAVE DONE
+  dk_watch()  — returns all events since last call (file writes, submits, etc.)
+  
+  # Look at file_write events from other generators:
+  # - What files did they create? What paths?
+  # - What symbols did they export? What names?
+  # - Do any of YOUR imports depend on THEIR files?
+  #
+  # If you see that another generator created a file you need to import from,
+  # use THEIR actual path and export names — not what you assumed.
+
+  # 2. READ the file (if it exists)
+  dk_file_read(path)
+
+  # 3. WRITE the file — using real import paths from dk_watch events
+  dk_file_write(path, content)
+
+  # 4. CHECK for conflict_warnings in the response
+  if conflict_warnings:
+    # Another generator merged changes to the same symbols.
+    # Read their version from the warning, rewrite to incorporate both, re-write.
+    # Do NOT call dk_connect. Retry dk_file_write with combined content.
+```
+
+**Why dk_watch matters:** Other generators are writing files RIGHT NOW. If Generator B
+creates `src/state/appReducer.ts` exporting `{ AppState, AppAction }`, and your unit needs
+those types, you MUST import from `src/state/appReducer.ts` using those exact names — not
+guess a path like `src/types/index.ts` or a name like `{ State }`. `dk_watch` tells you
+what actually exists.
+
+**When to call dk_watch:**
+- **Before writing any file that imports from another unit's symbols** — check what they
+  actually created
+- **After writing a batch of files** — check if events arrived that affect remaining files
+- **Before submitting** — final check that your imports match reality
+
+**What to look for in dk_watch events:**
+- `file_write` events from other generators → actual file paths and symbol names
+- `changeset.submitted` events → that generator is done, their files are final
+- `conflict_warnings` on any symbol you also touch
+
+**If dk_watch shows no events yet** (you're faster than other generators), write your files
+using the paths from the plan spec. Other generators will see YOUR file_write events via
+their dk_watch and adapt to YOUR paths. The first generator to write a shared interface
+sets the convention — others follow.
+
+**Handling conflict_warnings from dk_file_write:**
+If the dk_file_write response contains `conflict_warnings`:
+1. **Stop** — do not write more files
+2. **Read the merged version** from the warning (it includes their code)
+3. **Rewrite your file** to incorporate both changes
+4. **Re-call `dk_file_write`** — do NOT call dk_connect
+5. If warnings persist after 3 rewrites, proceed — the merge handler catches the rest
 
 **Implementation principles:**
 
@@ -99,10 +145,11 @@ For each file in your work unit:
   existing file, make your changes, write the whole thing back.
 - **Follow existing patterns.** If the codebase uses semicolons, use semicolons. If it uses
   tabs, use tabs. Match the style.
-- **Handle imports.** Make sure your code imports everything it needs. If you're creating a
-  new file, include all necessary imports.
-- **Export properly.** If other units depend on your symbols, make sure they're exported.
-  Check the work unit spec for what needs to be public.
+- **Import from reality, not assumptions.** Use `dk_watch` to see what other generators
+  actually created. Use THEIR paths and export names in your imports. Never guess.
+- **Export what the plan specifies.** If other units depend on your symbols, export them
+  with the exact names from the work unit spec. Other generators will see your file_write
+  events and use your actual paths.
 - **Write tests if specified.** If your work unit includes test criteria, write the test files
   too.
 - **Don't half-finish.** Every acceptance criterion for your unit must be addressed in your
@@ -131,17 +178,23 @@ After invoking the skill, follow its guidelines when implementing your unit:
 on white, cookie-cutter cards, Inter font, no personality) will FAIL evaluation. The
 `frontend-design` skill exists to prevent this — use it.
 
-### Step 4: Self-Check
+### Step 4: Self-Check — Verify Imports Against Reality
 
-Before submitting, verify your own work:
-1. Re-read each file you wrote with `dk_file_read`
-2. Check that all acceptance criteria for your unit are addressed
-3. Verify imports are correct and consistent
-4. Verify exported symbols match what other units expect
-5. Check for obvious bugs: typos, wrong variable names, missing error handling
+**Before submitting, you MUST verify your imports match what other generators actually created.**
 
-This is NOT a replacement for the evaluator. But catching your own obvious mistakes saves a
-round trip.
+1. **Call `dk_watch()`** — get all remaining events from other generators
+2. **For every import in your files that references another unit's symbols:**
+   - Check dk_watch events: did that generator create the file at the path you're importing?
+   - Do the export names match what you're importing?
+   - If there's a mismatch → fix your import path/names with `dk_file_write` NOW
+3. **Re-read each file you wrote** with `dk_file_read`
+4. Check that all acceptance criteria for your unit are addressed
+5. Verify exported symbols match what other units expect (from the plan spec)
+6. Check for obvious bugs: typos, wrong variable names, missing error handling
+
+**This step prevents the #1 cause of build failures after merge: import mismatches between
+generators.** Skipping this step means the smoke test will fail and you'll waste an entire
+fix round.
 
 ### Step 5: Submit and Review-Fix Loop
 
