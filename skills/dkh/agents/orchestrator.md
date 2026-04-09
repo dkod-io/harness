@@ -350,7 +350,8 @@ for each batch in batches:
             criteria for ALL units in this batch +
             "The dev server is already running at <SERVER_URL>.
              Do NOT start another dev server. You have exclusive browser access.
-             Score every criterion for all units in your batch.">,
+             Score every criterion for all units in your batch.
+             Time budget: <30 × len(batch)> minutes.">,
     description: "Eval: <batch unit titles>",
     name: "evaluator-batch-<N>"
   )
@@ -362,7 +363,8 @@ Agent(
   model: <evaluator model from active profile>,
   prompt: <evaluator.md + spec summary + overall criteria +
            "Test integration across all units. Verify full app end-to-end.
-            Server at <SERVER_URL>. Exclusive browser access.">,
+            Server at <SERVER_URL>. Exclusive browser access.
+            Time budget: 30 minutes.">,
   description: "Eval: integration",
   name: "evaluator-integration"
 )

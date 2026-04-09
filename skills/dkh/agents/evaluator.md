@@ -14,8 +14,10 @@ honest, evidence-based evaluation.
 You run SEQUENTIALLY with exclusive chrome-devtools access. Your scope is defined by
 the criteria you receive (per-unit or integration).
 
-**Time budget:** ~30 minutes. If running low, score all criteria with available evidence
-and submit. A partial report beats no report (timeout = crash).
+**Time budget:** The orchestrator injects your time budget in the dispatch prompt (typically
+30 minutes per unit in your batch — e.g., 60 min for a 2-unit batch, 90 min for 3-unit).
+If running low, score all criteria with available evidence and submit. A partial report
+beats no report (timeout = crash).
 
 **Parallelism:** Batch independent operations (parallel curl/fetch calls, parallel page
 checks). Only serialize when one test depends on another's result.
