@@ -64,11 +64,11 @@ You execute this loop until the application is complete or you hit the 3-round l
 check passes. You CANNOT skip phases. Skipping Phase 4 (Eval) is the most common failure
 mode — guard against it explicitly.**
 
-**CRITICAL: Before EVERY generator re-dispatch**, call `dk_close` on the old changeset_id
-to release its symbol claims. Without this, the new session's submit will conflict with
-the old session's stale claims — the agent will conflict with itself. This applies to
-ALL re-dispatch scenarios: review-fix, crashed generator recovery, round transitions,
-smoke test failures, and zero-merge recovery.
+**CRITICAL: Before EVERY generator re-dispatch**, release old symbol claims first.
+For batch cleanup (round transitions, REPLAN, zero-merge recovery), use the bulk-close
+endpoint. For single-changeset cleanup (Phase 3 review gate, crashed generator recovery),
+use `dk_close` on the specific session. Without cleanup, new sessions will self-conflict
+with stale claims.
 
 ### State you must track:
 
@@ -118,7 +118,8 @@ is a hard prerequisite, not a decision the harness can make autonomously.
 # This prevents stale sessions, orphaned claims, and false conflict_warnings.
 Bash: curl -sf -X POST "https://api.dkod.io/api/repos/<owner>/<repo>/changesets/bulk-close" \
   -H "Content-Type: application/json" \
-  -d '{"states": ["draft", "submitted", "rejected"], "created_before": "'$(date -u +%Y-%m-%dT%H:%M:%SZ)'"}'
+  -H "Authorization: Bearer $DKOD_API_KEY" \
+  -d '{"states": ["draft", "submitted", "approved", "rejected"], "created_before": "'$(date -u +%Y-%m-%dT%H:%M:%SZ)'"}'
 ```
 
 Proceed to Phase 1.
@@ -263,7 +264,14 @@ Before proceeding, verify:
 Partial merge failures are tolerable — the evaluator will catch missing functionality.
 But if ZERO changesets merged, that's a hard block.
 
-**If zero merges** → bulk-close all changesets via `curl -sf -X POST "https://api.dkod.io/api/repos/<owner>/<repo>/changesets/bulk-close" -H "Content-Type: application/json" -d '{"states": ["draft", "submitted", "rejected"], "created_before": "'$(date -u +%Y-%m-%dT%H:%M:%SZ)'"}'` to release all claims in one call. Then wipe stale state (`changeset_ids = []`, `session_map = {}`, `merged_commit = null`, `merge_failures = []`), then re-dispatch generators with error context.
+**If zero merges** → bulk-close all changesets to release claims, then wipe stale state and re-dispatch:
+```
+Bash: curl -sf -X POST "https://api.dkod.io/api/repos/<owner>/<repo>/changesets/bulk-close" \
+  -H "Content-Type: application/json" \
+  -H "Authorization: Bearer $DKOD_API_KEY" \
+  -d '{"states": ["draft", "submitted", "approved", "rejected"], "created_before": "'$(date -u +%Y-%m-%dT%H:%M:%SZ)'"}'
+```
+Then wipe stale state (`changeset_ids = []`, `session_map = {}`, `merged_commit = null`, `merge_failures = []`), then re-dispatch generators with error context.
 **If some merged** → update `merged_commit = <hash>`, record `merge_failures`.
 Output the updated state block:
 > **Gate 3 PASSED** — `merged_commit: [hash]`, `merge_failures: [list or empty]`. Proceeding to Phase 4 (Eval).
@@ -465,13 +473,12 @@ When Phase 5 decides to fix, explicitly reset state before the next round:
 ```
 # ROUND TRANSITION — execute this before re-entering Phase 2:
 
-# FIRST: bulk-close all draft/rejected changesets to release symbol claims.
+# FIRST: bulk-close all non-terminal changesets to release symbol claims.
 # Without this, re-dispatched generators will self-conflict.
-# This replaces per-changeset dk_close loops — one call cleans up everything.
 Bash: curl -sf -X POST "https://api.dkod.io/api/repos/<owner>/<repo>/changesets/bulk-close" \
   -H "Content-Type: application/json" \
-  -d '{"states": ["draft", "rejected"], "created_before": "'$(date -u +%Y-%m-%dT%H:%M:%SZ)'"}'
-# Returns: { changesets_closed, conflicts_resolved, claims_released, sessions_disconnected }
+  -H "Authorization: Bearer $DKOD_API_KEY" \
+  -d '{"states": ["draft", "submitted", "approved", "rejected"], "created_before": "'$(date -u +%Y-%m-%dT%H:%M:%SZ)'"}'
 
 round += 1
 active_units = [failed units from eval, EXCLUDING blocked_units]
@@ -500,7 +507,8 @@ When Phase 5 chooses REPLAN (and `replan_count == 0`), reset state for a full re
 # FIRST: bulk-close all non-terminal changesets to release symbol claims.
 Bash: curl -sf -X POST "https://api.dkod.io/api/repos/<owner>/<repo>/changesets/bulk-close" \
   -H "Content-Type: application/json" \
-  -d '{"states": ["draft", "submitted", "rejected"], "created_before": "'$(date -u +%Y-%m-%dT%H:%M:%SZ)'"}'
+  -H "Authorization: Bearer $DKOD_API_KEY" \
+  -d '{"states": ["draft", "submitted", "approved", "rejected"], "created_before": "'$(date -u +%Y-%m-%dT%H:%M:%SZ)'"}'
 
 replan_count += 1           # increment FIRST — survives the reset
 round = 1                   # restart from round 1
