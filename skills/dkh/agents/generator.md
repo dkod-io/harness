@@ -311,7 +311,7 @@ in the correct dependency order during Phase 3.
 **Notes:** <any implementation decisions, assumptions, or concerns>
 ```
 
-**Template B — Blocked by unresolved conflict (could not submit):**
+**Template B — Blocked by unresolved conflict BEFORE first submit (no changeset_id):**
 ```
 ## Generator Report: <unit title>
 
@@ -324,9 +324,28 @@ in the correct dependency order during Phase 3.
 **Notes:** <what was tried, why resolution failed>
 ```
 
-**CRITICAL: Template B MUST include the Session ID.** The orchestrator needs it to call
-`dk_close` on your orphaned session and release symbol claims. Without it, re-dispatched
-generators will self-conflict on the same symbols.
+**Template C — Conflict during review-fix loop AFTER a successful submit:**
+```
+## Generator Report: <unit title>
+
+**Status:** conflict_blocked_after_submit
+**Session ID:** <from dk_connect response>
+**Changeset ID:** <from the EARLIER successful dk_submit — this is valid, do NOT omit it>
+**Last successful review score:** <score from the round that succeeded>
+**Rounds completed before conflict:** <round number>
+**Conflicting file:** <path of the file with unresolved conflict_warnings>
+**Conflicting agent:** <agent name from the conflict_warning>
+**Notes:** <what was tried, why resolution failed during review-fix>
+```
+
+**CRITICAL: Choose the right template.**
+- Template B: conflict blocked you BEFORE your first dk_submit → no changeset_id exists.
+- Template C: you submitted successfully, then hit a conflict during review-fix → your
+  changeset_id from the earlier submit IS VALID and MUST be reported. The orchestrator
+  will use it in Phase 3 (the earlier submitted version may still be mergeable).
+
+**Both templates MUST include the Session ID.** The orchestrator needs it to call
+`dk_close` on your session and release symbol claims.
 
 **After outputting either report, you are DONE. Return control to the orchestrator.**
 
