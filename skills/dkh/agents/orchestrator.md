@@ -228,12 +228,16 @@ Before proceeding, verify:
 
 **If any generators are conflict_blocked:**
 1. Call `dk_close(session_id)` for each conflict_blocked generator (if not already closed above)
-2. Re-dispatch ONLY the conflict_blocked generators with feedback:
-   "Your previous attempt was blocked by a conflict on <file> with <agent>.
-   That agent's changeset is now submitted. Call dk_watch() first, adapt to their
-   changes, then implement your unit."
-3. Wait for re-dispatched generators to complete
-4. Re-check Gate 2
+2. For each conflict_blocked generator:
+   - Increment `unit_attempts[unit_id]`
+   - If `unit_attempts[unit_id] >= 3` → move to `blocked_units`, skip re-dispatch
+   - Otherwise → re-dispatch with feedback:
+     "Your previous attempt was blocked by a conflict on <file> with <agent>.
+     That agent's changeset is now submitted. Call dk_watch() first, adapt to their
+     changes, then implement your unit."
+3. If all conflict_blocked generators are now in `blocked_units` → fall through to
+   gate pass with whatever submitted changesets exist (forced-ship with documented gaps)
+4. Otherwise → wait for re-dispatched generators to complete, re-check Gate 2
 
 **If any generators crashed** (no report at all):
 - If they have a recorded session_id → call `dk_close(session_id)` to release claims
