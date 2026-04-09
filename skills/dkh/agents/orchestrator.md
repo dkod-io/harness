@@ -207,19 +207,40 @@ Other units' acceptance criteria are noise that wastes context tokens.
 
 Wait for all generators to complete.
 
-**As each generator completes**, record its session_id and changeset_id in `session_map`, then output a progress line:
-> Generator **[unit-name]** complete — session `[sid]`, changeset `[id]`, self-score [X/5]. Progress: **N/M generators done.**
+**As each generator completes**, check its report status:
 
-This keeps the user informed as changesets arrive instead of showing a stale empty state for the entire build phase.
+- **Status: submitted** → record session_id and changeset_id in `session_map`.
+  Output: `Generator **[unit-name]** complete — session [sid], changeset [id], score [X/5]. Progress: N/M done.`
+
+- **Status: conflict_blocked** → the generator could NOT submit due to unresolved
+  conflict_warnings. Record its session_id (from the report) but NO changeset_id.
+  **Immediately call `dk_close(session_id)`** to release its symbol claims — without
+  this, the re-dispatched generator will self-conflict on the same file.
+  Output: `Generator **[unit-name]** CONFLICT_BLOCKED — closing session [sid], will re-dispatch. Progress: N/M done.`
+
+- **No report / crashed** → record whatever session_id is available from the dispatch.
 
 **═══ GATE 2 CHECK ═══**
 Before proceeding, verify:
 - [ ] Every generator has reported back
-- [ ] Every report includes a changeset_id
-- [ ] `changeset_ids` has one entry per unit in `active_units`
+- [ ] Count generators with `status: submitted` and a changeset_id
+- [ ] Count generators with `status: conflict_blocked` (no changeset_id)
 
-**If gate fails** → for each crashed generator that has a recorded changeset_id, call `dk_close(session_map[changeset_id])` to release its claims. Then re-dispatch. Do NOT proceed until all have submitted.
-**If gate passes** → set `changeset_ids = [...]` and verify `session_map` has an entry for each changeset_id. Output the updated state block:
+**If any generators are conflict_blocked:**
+1. Call `dk_close(session_id)` for each conflict_blocked generator (if not already closed above)
+2. Re-dispatch ONLY the conflict_blocked generators with feedback:
+   "Your previous attempt was blocked by a conflict on <file> with <agent>.
+   That agent's changeset is now submitted. Call dk_watch() first, adapt to their
+   changes, then implement your unit."
+3. Wait for re-dispatched generators to complete
+4. Re-check Gate 2
+
+**If any generators crashed** (no report at all):
+- If they have a recorded session_id → call `dk_close(session_id)` to release claims
+- Re-dispatch. Do NOT proceed until all have submitted.
+
+**If gate passes** (all generators have status: submitted with changeset_ids):
+→ set `changeset_ids = [...]` and verify `session_map` has an entry for each changeset_id.
 > **Gate 2 PASSED** — `changeset_ids: [id1, id2, ...]`, `active_units: [N units]`. Proceeding to Phase 3 (Land).
 
 ---

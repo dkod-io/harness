@@ -287,6 +287,9 @@ session_id and changeset_id back to the orchestrator and **exit immediately**. D
 `dk_merge`, `dk_approve`, `dk_push`, or `dk_verify` — the orchestrator lands all changesets
 in the correct dependency order during Phase 3.
 
+**Use the appropriate report template based on your exit condition:**
+
+**Template A — Successful submit:**
 ```
 ## Generator Report: <unit title>
 
@@ -301,7 +304,24 @@ in the correct dependency order during Phase 3.
 **Notes:** <any implementation decisions, assumptions, or concerns>
 ```
 
-**After outputting this report, you are DONE. Return control to the orchestrator.**
+**Template B — Blocked by unresolved conflict (could not submit):**
+```
+## Generator Report: <unit title>
+
+**Status:** conflict_blocked
+**Session ID:** <from dk_connect response>
+**Changeset ID:** NONE — dk_submit was NOT called (conflict gate blocked it)
+**Conflicting file:** <path of the file with unresolved conflict_warnings>
+**Conflicting agent:** <agent name from the conflict_warning>
+**Attempts to resolve:** <number of dk_file_write retries attempted>
+**Notes:** <what was tried, why resolution failed>
+```
+
+**CRITICAL: Template B MUST include the Session ID.** The orchestrator needs it to call
+`dk_close` on your orphaned session and release symbol claims. Without it, re-dispatched
+generators will self-conflict on the same symbols.
+
+**After outputting either report, you are DONE. Return control to the orchestrator.**
 
 ## When You're Re-Dispatched (Fix Round)
 
