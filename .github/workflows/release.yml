@@ -16,33 +16,27 @@ jobs:
         with:
           fetch-depth: 0
 
-      - name: Read current version from SKILL.md
+      - name: Calculate next version from latest tag
         id: version
         run: |
-          VERSION=$(grep '^version:' skills/dkh/SKILL.md | head -1 | awk '{print $2}' | tr -d '[:space:]')
-          if [ -z "$VERSION" ]; then
-            echo "No version found in SKILL.md frontmatter"
-            exit 1
-          fi
-          TAG="v${VERSION}"
-          echo "version=${VERSION}" >> "$GITHUB_OUTPUT"
-          echo "tag=${TAG}" >> "$GITHUB_OUTPUT"
+          # Get the latest tag, or start at 0.1.0 if none exists
+          LATEST_TAG=$(git describe --tags --abbrev=0 2>/dev/null || echo "v0.1.0")
+          CURRENT="${LATEST_TAG#v}"
 
-      - name: Check if tag already exists
-        id: check_tag
-        env:
-          TAG: ${{ steps.version.outputs.tag }}
-        run: |
-          if git rev-parse "$TAG" >/dev/null 2>&1; then
-            echo "exists=true" >> "$GITHUB_OUTPUT"
-          else
-            echo "exists=false" >> "$GITHUB_OUTPUT"
-          fi
+          # Bump patch: 0.1.25 -> 0.1.26
+          MAJOR=$(echo "$CURRENT" | cut -d. -f1)
+          MINOR=$(echo "$CURRENT" | cut -d. -f2)
+          PATCH=$(echo "$CURRENT" | cut -d. -f3)
+          NEW_PATCH=$((PATCH + 1))
+          NEW_VERSION="${MAJOR}.${MINOR}.${NEW_PATCH}"
+          TAG="v${NEW_VERSION}"
+
+          echo "current=${CURRENT}" >> "$GITHUB_OUTPUT"
+          echo "new=${NEW_VERSION}" >> "$GITHUB_OUTPUT"
+          echo "tag=${TAG}" >> "$GITHUB_OUTPUT"
+          echo "Bumping: ${CURRENT} -> ${NEW_VERSION}"
 
       - name: Generate release notes
-        if: steps.check_tag.outputs.exists == 'false'
-        env:
-          TAG: ${{ steps.version.outputs.tag }}
         run: |
           PREV_TAG=$(git describe --tags --abbrev=0 2>/dev/null || echo "")
           if [ -z "$PREV_TAG" ]; then
@@ -55,7 +49,6 @@ jobs:
           fi
 
       - name: Create release
-        if: steps.check_tag.outputs.exists == 'false'
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           TAG: ${{ steps.version.outputs.tag }}
