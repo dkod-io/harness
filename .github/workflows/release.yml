@@ -6,11 +6,12 @@ on:
 
 permissions:
   contents: write
+  pull-requests: write
 
 jobs:
   release:
     runs-on: ubuntu-latest
-    if: "!contains(github.event.head_commit.message, '[skip ci]')"
+    if: "!startsWith(github.event.head_commit.message, 'release:')"
     steps:
       - uses: actions/checkout@v4
         with:
@@ -19,11 +20,9 @@ jobs:
       - name: Calculate next version from latest tag
         id: version
         run: |
-          # Get the latest tag, or start at 0.1.0 if none exists
           LATEST_TAG=$(git describe --tags --abbrev=0 2>/dev/null || echo "v0.1.0")
           CURRENT="${LATEST_TAG#v}"
 
-          # Bump patch: 0.1.25 -> 0.1.26
           MAJOR=$(echo "$CURRENT" | cut -d. -f1)
           MINOR=$(echo "$CURRENT" | cut -d. -f2)
           PATCH=$(echo "$CURRENT" | cut -d. -f3)
@@ -42,7 +41,7 @@ jobs:
           if [ -z "$PREV_TAG" ]; then
             git log --oneline --no-merges | head -20 > /tmp/release-notes.txt
           else
-            git log --oneline --no-merges "${PREV_TAG}..HEAD" | grep -v "\[skip ci\]" > /tmp/release-notes.txt
+            git log --oneline --no-merges "${PREV_TAG}..HEAD" | grep -v "release:" > /tmp/release-notes.txt
           fi
           if [ ! -s /tmp/release-notes.txt ]; then
             echo "Patch release" > /tmp/release-notes.txt
@@ -56,3 +55,44 @@ jobs:
           gh release create "$TAG" \
             --title "$TAG" \
             --notes-file /tmp/release-notes.txt
+
+      - name: Update version in SKILL.md and plugin.json
+        env:
+          NEW: ${{ steps.version.outputs.new }}
+        run: |
+          sed -i "s/^version: .*/version: ${NEW}/" skills/dkh/SKILL.md
+          if [ -f .claude-plugin/plugin.json ]; then
+            sed -i "s/\"version\": \".*\"/\"version\": \"${NEW}\"/" .claude-plugin/plugin.json
+          fi
+
+      - name: Create version bump PR and auto-merge
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          NEW: ${{ steps.version.outputs.new }}
+          TAG: ${{ steps.version.outputs.tag }}
+        run: |
+          BRANCH="release/${TAG}"
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git checkout -b "$BRANCH"
+          git add skills/dkh/SKILL.md
+          if [ -f .claude-plugin/plugin.json ]; then
+            git add .claude-plugin/plugin.json
+          fi
+
+          # Only proceed if there are staged changes
+          if git diff --cached --quiet; then
+            echo "No version changes to commit — skipping bump PR"
+            exit 0
+          fi
+
+          git commit -m "release: ${TAG} — bump version to ${NEW}"
+          git push origin "$BRANCH"
+
+          PR_URL=$(gh pr create \
+            --base main \
+            --head "$BRANCH" \
+            --title "release: ${TAG}" \
+            --body "Auto-generated version bump to ${NEW}. Created by release workflow.")
+
+          gh pr merge "$PR_URL" --auto --squash
