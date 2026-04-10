@@ -247,15 +247,19 @@ ALL units dispatch simultaneously → 6 agents at once
 **Key patterns in this decomposition:**
 
 1. **Every symbol has exactly ONE owner.** The `App` component is owned by Unit 1 and ONLY
-   Unit 1. No other unit writes to `App`. This prevents true conflicts. If two generators
-   both write the `App` component, dkod will detect a true conflict — the planner should
-   prevent this by assigning ownership. (dkod CAN resolve conflicts automatically, but
-   avoiding them is faster.)
+   Unit 1. No other unit writes to `App`. This prevents true conflicts.
 
-2. **Units inline their own types.** Unit 5 (Task list UI) defines its own `Task` interface
-   locally instead of importing from Unit 3. This eliminates any need for sequencing.
+2. **No two units write to the same file.** If `src/store/hooks.ts` has shared hooks,
+   ONE unit owns that file and writes ALL the hooks. Other units that need hooks define
+   them locally in their own files (e.g., `src/features/team/hooks.ts`). Shared files
+   like `store/hooks.ts`, `utils/helpers.ts`, `types/index.ts` are conflict magnets —
+   assign them to exactly one unit or split them into per-feature files.
 
-3. **All 6 units dispatch simultaneously.** 6 agents run at once.
+3. **Units inline their own types AND hooks.** Unit 5 (Task list UI) defines its own
+   `Task` interface AND its own hooks locally instead of importing from shared files.
+   This eliminates cross-unit file conflicts entirely.
+
+4. **All 6 units dispatch simultaneously.** 6 agents run at once.
 
 ### Step 5: Assign Symbol Ownership
 
@@ -400,6 +404,10 @@ if any check fails — save a round trip by catching it yourself:
 - [ ] Overall acceptance criteria exist (app starts, no console errors, responsive, etc.)
 - [ ] **For UI projects**: Design Direction section exists with specific tone (not "modern
   and clean"), hex color values, and named font choices (not Arial/Inter/Roboto)
+- [ ] **No two units create files in the same path.** Check all `Creates:` fields — if two
+  units list the same file path, one of them must be moved to a per-feature file. Shared
+  files (`store/hooks.ts`, `utils/helpers.ts`, `types/index.ts`) are conflict magnets.
+  Either assign to one unit or split into `features/<name>/hooks.ts` per unit.
 
 If any check fails, fix the plan before outputting it.
 
