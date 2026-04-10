@@ -67,12 +67,16 @@ You will NOT call dk_connect again.**
 
 ### Step 2: Understand Context
 
-Call `dk_context` with queries relevant to your work unit:
-- Look up the symbols you need to modify or that your new code will interact with
-- Understand existing patterns, naming conventions, import styles
-- Check what other files exist that might affect your implementation
+**Greenfield (empty repo)?** Skip `dk_context` and `dk_file_read` entirely — there's
+nothing to read. Go straight to Step 3 and write your files based on the plan spec.
+Do NOT call `dk_file_read` on files that don't exist yet (e.g., `src/App.tsx` before
+the scaffolding unit creates it). If `dk_file_read` returns "file not found", move on
+immediately — never retry a missing file.
 
-Call `dk_file_read` for any files you need to understand before modifying them.
+**Existing codebase?** Read efficiently:
+- `dk_context` — look up symbols you need to modify or interact with
+- `dk_file_read` — only for files that ALREADY EXIST and you need to understand
+- If `dk_file_read` returns an error, the file doesn't exist — skip it, don't retry
 
 ### Step 3: Implement — MAXIMUM CONCURRENCY + REAL-TIME COORDINATION
 
