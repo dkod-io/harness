@@ -58,7 +58,7 @@ Categorize each changeset:
 **Step 2: Close ONLY the incomplete changesets**
 ```
 # Close draft/conflicted changesets only — preserve submitted ones
-Bash: curl -sf -X POST "https://api.dkod.io/api/repos/<owner%2Frepo>/changesets/bulk-close" \
+Bash: curl -sf -X POST "https://api.dkod.io/api/repos/<owner>/<repo>/changesets/bulk-close" \
   -H "Content-Type: application/json" \
   -H "Authorization: Bearer $DKOD_API_KEY" \
   -d '{"states": ["draft", "conflicted"], "created_before": "'$(date -u +%Y-%m-%dT%H:%M:%SZ)'"}'
