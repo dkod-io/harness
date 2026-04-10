@@ -79,7 +79,7 @@ without invoking the skill.
 
 ## Model Profiles
 
-**Active profile: balanced**
+**Active profile: quality**
 
 Each agent runs on a model appropriate to its task. The orchestrator reads the active
 profile and passes `model:` on every Agent dispatch call.
