@@ -48,27 +48,29 @@ represent completed work that must be preserved.
 Call `dk_status` or list changesets via the API to see what the interrupted session left behind.
 Categorize each changeset:
 
-- **`submitted` state** → KEEP. This generator finished its work. Record its changeset_id
-  and session_id. Do NOT close it. Do NOT re-dispatch this unit.
+- **`submitted` state** → KEEP. This generator finished its work. Record its changeset_id.
+  Do NOT close it. Do NOT re-dispatch this unit.
+- **`approved` state** → KEEP. This changeset passed review and is ready to merge.
+  Record its changeset_id. Proceed to merge in Phase 3.
 - **`draft` state** → INCOMPLETE. This generator was interrupted before dk_submit.
-  Call `dk_close(session_id)` to release its symbol claims. Mark this unit for re-dispatch.
-- **`conflicted` state** → STUCK. Call `dk_close(session_id)` to release claims.
   Mark this unit for re-dispatch.
+- **`conflicted` state** → STUCK. Mark this unit for re-dispatch.
+- **`rejected` state** → FAILED. Mark this unit for re-dispatch.
 
-**Step 2: Close ONLY the incomplete changesets**
+**Step 2: Close incomplete/failed changesets and release their symbol claims**
 ```
-# Close draft/conflicted changesets only — preserve submitted ones
+# Close draft/conflicted/rejected — preserve submitted and approved
 Bash: curl -sf -X POST "https://api.dkod.io/api/repos/<owner>/<repo>/changesets/bulk-close" \
   -H "Content-Type: application/json" \
   -H "Authorization: Bearer $DKOD_API_KEY" \
-  -d '{"states": ["draft", "conflicted"], "created_before": "'$(date -u +%Y-%m-%dT%H:%M:%SZ)'"}'  \
+  -d '{"states": ["draft", "conflicted", "rejected"], "created_before": "'$(date -u +%Y-%m-%dT%H:%M:%SZ)'"}'  \
   || { echo "Bulk-close failed — aborting resume. Check DKOD_API_KEY and repo path."; exit 1; }
 ```
 
 **Step 3: Reconstruct harness state**
-- `changeset_ids` = list of submitted changeset_ids from Step 1
-- `active_units` = units whose generators were incomplete (draft/conflicted/missing)
-- Units with submitted changesets are DONE — skip them
+- `changeset_ids` = list of submitted + approved changeset_ids from Step 1
+- `active_units` = units whose generators were incomplete (draft/conflicted/rejected/missing)
+- Units with submitted or approved changesets are DONE — skip them
 
 **Step 4: Resume with only the incomplete units**
 Re-dispatch only the generators for `active_units` (incomplete ones). The submitted
