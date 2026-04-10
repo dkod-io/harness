@@ -3,7 +3,7 @@ name: dkh:generator
 description: >
   Implements a single work unit from the harness plan via an isolated dkod session. Receives
   a spec, a work unit, and acceptance criteria. Writes code, submits the changeset, then runs
-  a review-fix loop (up to 3 rounds) handling both local and deep code review findings before
+  a review-fix loop (up to 10 rounds) handling both local and deep code review findings before
   reporting completion. Does not merge — the orchestrator handles landing.
 maxTurns: 80
 ---
@@ -336,7 +336,7 @@ score improvement per round.
 
 **These status messages are mandatory.** They appear in the dkod-app activity feed and
 let the user know which review-fix round you're on, how many findings you're fixing, and
-when the loop ends. Always include the round number, total rounds (3), finding count,
+when the loop ends. Always include the round number, total rounds (10), finding count,
 and current score.
 
 **Handling findings:**
@@ -351,7 +351,7 @@ and current score.
 
 ### Step 6: Report
 
-After the review-fix loop exits (clean score or 3 rounds exhausted), report your
+After the review-fix loop exits (clean score or 10 rounds exhausted), report your
 session_id and changeset_id back to the orchestrator and **exit immediately**. Do NOT call
 `dk_merge`, `dk_approve`, `dk_push`, or `dk_verify` — the orchestrator lands all changesets
 in the correct dependency order during Phase 3.
@@ -366,7 +366,7 @@ in the correct dependency order during Phase 3.
 **Session ID:** <from dk_connect response>
 **Changeset ID:** <from dk_submit response>
 **Final review score:** <score after last round>
-**Rounds used:** <1-3>
+**Rounds used:** <1-10>
 **Files modified:** <list>
 **Files created:** <list>
 **Symbols implemented:** <list>

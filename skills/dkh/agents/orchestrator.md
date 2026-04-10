@@ -83,7 +83,7 @@ eval_reports: []            # Set after Phase 4 — MUST EXIST before dk_push
 unit_attempts: {}           # { "unit-id": attempt_count } — incremented each re-dispatch
 blocked_units: []           # Units that exceeded MAX_UNIT_ATTEMPTS (3) — not retried
 replan_count: 0             # Number of REPLANs executed this build (max 1)
-review_round: {}            # { "unit_id": round_count } — per-unit review-fix counter, keyed by unit NOT changeset (max 2)
+review_round: {}            # { "unit_id": round_count } — per-unit review-fix counter, keyed by unit NOT changeset (max 10)
 session_map: {}             # { changeset_id: session_id } — populated from each generator's dk_connect response, needed for dk_close
 ```
 
@@ -266,7 +266,7 @@ Before proceeding, verify:
 **Entry check**: `changeset_ids` must be non-empty.
 
 1. **Verify in PARALLEL** — `dk_verify` ALL changesets simultaneously
-2. **Review Gate** (advisory, max 2 rounds) — see below
+2. **Review Gate** (CRITICAL, max 10 rounds) — see below
 3. **Approve** — `dk_approve` each verified changeset
 4. **Merge sequentially** — `dk_merge` each changeset one at a time. Merge order does not
    matter — all units are independent.
@@ -622,7 +622,7 @@ You decide:
 | Styling | Tailwind CSS unless prompt specifies otherwise |
 | Testing | Vitest for frontend, pytest for backend |
 | Conflict resolution | Auto-resolve non-overlapping. keep_yours for true conflicts. |
-| Eval failures | Re-dispatch generators with feedback. Max 3 rounds. |
+| Eval failures | Re-dispatch generators with feedback. Max 10 review rounds. |
 | Ambiguous requirements | Make a reasonable choice and document it in the spec |
 
 ## PR Description Format
