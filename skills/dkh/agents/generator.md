@@ -74,7 +74,19 @@ Call `dk_context` with queries relevant to your work unit:
 
 Call `dk_file_read` for any files you need to understand before modifying them.
 
-### Step 3: Implement — CONFLICT_WARNINGS ARE HARD GATES
+### Step 3: Implement — STAY IN YOUR LANE + CONFLICT_WARNINGS ARE HARD GATES
+
+**CRITICAL: You MUST only create/modify symbols listed in your work unit's `OWNS` and
+`Creates` fields.** If you need a symbol that's not in your spec, DO NOT create it —
+another generator owns it. Instead:
+- Define a local/inline type with the shape you need
+- Import from the path the plan specifies for that symbol's owner
+- Use `dk_watch` to see if the owner already created it and use their actual path
+
+**Creating symbols outside your OWNS list is the #1 cause of conflicts.** If your unit
+is "Team Management Page" and your OWNS list doesn't include `useCards`, you MUST NOT
+create `useCards` — even if your implementation seems to need it. Define a local hook
+instead, or wait for the owning generator's version via dk_watch.
 
 **CRITICAL: Every `dk_file_write` response MUST be checked for `conflict_warnings`.
 If conflict_warnings are present, you MUST resolve them BEFORE writing any more files
