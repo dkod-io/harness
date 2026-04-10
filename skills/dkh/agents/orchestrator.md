@@ -293,9 +293,10 @@ After dk_verify for each changeset:
      to wait for it, then `dk_review` again
 4. **`review_round[unit_id]` >= 10** → max rounds reached, hard exit:
    - If local ≥ 4/5 → proceed to approve with the best available changeset. Log a warning.
-   - If local < 4/5 → skip this unit. Record it in `merge_failures` with reason
-     "review gate exhausted: local score X/5 after 10 rounds". Do NOT approve or merge.
-     The evaluator will catch the missing functionality.
+   - If local < 4/5 → `dk_close(session_map[changeset_id])` to release claims, then
+     skip this unit. Record it in `merge_failures` with reason "review gate exhausted:
+     local score X/5 after 10 rounds". Do NOT approve or merge. The evaluator will catch
+     the missing functionality.
 
 **Re-dispatch flow (when scores don't meet gates):**
 5. **Close the old changeset** before re-dispatch: `dk_close(session_id)`
