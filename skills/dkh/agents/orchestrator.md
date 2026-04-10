@@ -273,30 +273,39 @@ Before proceeding, verify:
    **After each merge**, output a progress line:
    > Merged changeset `[id]` for unit **[name]**. Progress: **N/M merged.**
 
-#### Review Gate (advisory, max 2 rounds)
+#### Review Gate — CRITICAL (max 10 rounds)
+
+**═══ MERGE QUALITY GATES — NO EXCEPTIONS ═══**
+- **Local review: must be ≥ 4/5** with no severity:"error" findings
+- **Deep review: must be 5/5** with no severity:"error" findings
+- Changesets that don't meet BOTH thresholds MUST NOT be approved or merged.
 
 After dk_verify for each changeset:
 
-1. Call `dk_review(changeset_id)` to get code review results
-2. Check the LOCAL review results (evaluate conditions in order):
-   - **`review_round[unit_id]` >= 2** → max rounds reached, proceed to approve anyway (advisory)
-   - **Score >= 3 AND no "error" severity findings** → proceed to approve
-   - **Score < 3 OR has "error" severity findings** → close the old changeset, then re-dispatch generator with review feedback
-3. **Close the old changeset** before re-dispatch: `dk_close(session_id)` — this releases symbol claims so the new session won't self-conflict.
-4. **Increment `review_round[unit_id]`** by 1, then re-dispatch with payload:
+1. Call `dk_review(changeset_id)` to get code review results (local + deep)
+2. **Check LOCAL review first:**
+   - **Local score < 4 OR has "error" findings** → re-dispatch generator to fix
+   - **Local score ≥ 4 AND no "error" findings** → proceed to check deep review
+3. **Check DEEP review:**
+   - **Deep score == 5 AND no "error" findings** → proceed to approve
+   - **Deep score < 5 OR has "error" findings** → re-dispatch generator to fix
+   - **Deep review not yet complete** → call `dk_watch(filter: "changeset.review.completed")`
+     to wait for it, then `dk_review` again
+4. **`review_round[unit_id]` >= 10** → max rounds reached. If local ≥ 4/5, proceed to
+   approve with the best available changeset. Log a warning with the final scores.
+
+**Re-dispatch flow (when scores don't meet gates):**
+5. **Close the old changeset** before re-dispatch: `dk_close(session_id)`
+6. **Increment `review_round[unit_id]`** by 1, then re-dispatch with payload:
    - Original work unit spec
    - Review findings (copy the dk_review output verbatim as context)
-   - Instruction: "Fix these code review findings, then re-submit via dk_submit"
-5. After generator re-submits with a new session_id and changeset_id:
-   a. **Update `session_map`**: record `session_map[new_changeset_id] = new_session_id` (remove the old entry)
-   b. **Stage** the new changeset_id (do NOT overwrite `changeset_ids` yet — the original verified changeset must remain as fallback)
-   c. **Run `dk_verify`** on the new changeset — re-submitted code must pass lint/type-check/tests
-   d. If dk_verify fails, call `dk_close(session_map[new_changeset_id])` to release the new session's claims, then keep the original changeset_id in `changeset_ids` (skip to approve after max rounds using the last verified changeset)
-   e. If dk_verify passes, **commit** the new changeset_id to `changeset_ids` (replacing the old one), call `dk_review` again, and **return to step 2** to re-evaluate the score and findings
-6. **Max 2 review-fix rounds per unit** — enforced by the first condition in step 2
-7. Track `review_round[unit_id]` separately from eval `round` in state — key by unit_id (stable), NOT changeset_id (changes on re-submit)
-
-Do NOT wait for deep review results — deep review runs asynchronously and is informational only. Only act on local review results which are available immediately after submit.
+   - "Fix these code review findings. Target: local ≥ 4/5, deep 5/5."
+7. After generator re-submits with a new session_id and changeset_id:
+   a. **Update `session_map`**: record the new IDs (remove old entry)
+   b. **Run `dk_verify`** on the new changeset
+   c. If dk_verify fails → keep the original changeset_id as fallback
+   d. If dk_verify passes → commit the new changeset_id, `dk_review` again, return to step 2
+8. Track `review_round[unit_id]` separately from eval `round` — key by unit_id (stable)
 
 Handle conflicts: `dk_resolve` → retry merge.
 

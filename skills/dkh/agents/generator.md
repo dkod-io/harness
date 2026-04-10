@@ -259,53 +259,80 @@ findings. You now own the review-fix lifecycle — do NOT just report the score 
 
 **Output status messages so the user can track progress in the dkod-app UI.**
 
-**Run the review-fix loop (max 3 rounds):**
+**Run the review-fix loop (max 10 rounds):**
+
+**═══ MERGE QUALITY GATES — CRITICAL ═══**
+- **Local review score: must be ≥ 4/5** to proceed to deep review
+- **Deep review score: must be 5/5** to exit the loop
+- Changesets that don't meet these thresholds MUST NOT be merged.
+  Keep fixing until you reach 5/5 deep or exhaust 10 rounds.
 
 Before entering the loop, output:
-> Starting review-fix loop (max 3 rounds)
+> Starting review-fix loop (max 10 rounds) — target: local ≥ 4/5, deep 5/5
 
 ```
 round = 1   (the dk_submit you just did)
 
-LOOP while round ≤ 3:
+LOOP while round ≤ 10:
 
-  # Check LOCAL review (inline with dk_submit response)
-  if local review has severity:"error" findings:
-    OUTPUT: "Review-fix round {round}/3: fixing {N} findings (score: {score}/5)"
-    fix the files via dk_file_write
-    # ═══ CONFLICT CHECK — same rule as Step 3 ═══
-    # Every dk_file_write in the review-fix loop MUST be checked for
-    # conflict_warnings. If present, resolve BEFORE re-submitting.
-    # The hard gate applies here too — no exceptions for review fixes.
-    if any dk_file_write returned conflict_warnings → resolve (see Step 3)
+  # ═══ CHECK LOCAL REVIEW (inline with dk_submit response) ═══
+  if local_score < 4 OR local review has severity:"error" findings:
+
+    # STEP A: READ ALL findings — every category, every file, every detail
+    # The review has sections: Convention, Architecture, Logic, Security, etc.
+    # Read EVERY finding, not just the first one or the summary score.
+
+    # STEP B: PLAN all fixes before touching any file
+    # List each finding and what needs to change:
+    #   - Finding 1 (Convention): missing semicolons in X.tsx → add them
+    #   - Finding 2 (Logic): null check missing in Y.ts:42 → add guard
+    #   - Finding 3 (Security): unsanitized input in Z.tsx → escape it
+    OUTPUT: "Review-fix round {round}/10: fixing {N} local findings (score: {local_score}/5)"
+
+    # STEP C: FIX ALL findings across ALL files, THEN submit once
+    # Do NOT submit after each individual fix. Fix everything first.
+    for each file that needs changes:
+      dk_file_write(path, fixed_content)  # may fix multiple findings in one write
+      if conflict_warnings → resolve (see Step 3)
+
+    # STEP D: Submit the complete batch of fixes as ONE changeset
     round += 1
-    if round > 3 → break
+    if round > 10 → break
     dk_submit again
     continue  (re-check local on the new submission)
 
-  # Local is clean — wait for DEEP review
+  # ═══ LOCAL IS CLEAN (≥ 4/5) — CHECK DEEP REVIEW ═══
   dk_watch(filter: "changeset.review.completed")  — blocks until done
   dk_review(changeset_id) → get deep findings + score
 
-  if score ≥ 4 AND no severity:"error" findings:
-    OUTPUT: "Review complete — score: {score}/5 after {round} round(s)"
-    break  (changeset is clean)
+  if deep_score == 5 AND no severity:"error" findings:
+    OUTPUT: "Review complete — local: {local_score}/5, deep: {deep_score}/5 after {round} round(s)"
+    break  (changeset meets quality gates)
 
-  # Deep found issues — fix and re-submit
-  OUTPUT: "Review-fix round {round}/3: fixing {N} deep findings (score: {score}/5)"
-  fix files based on deep findings via dk_file_write
-  # ═══ CONFLICT CHECK — same rule as Step 3 ═══
-  if any dk_file_write returned conflict_warnings → resolve (see Step 3)
+  # Deep score < 5 — same fix process: read ALL, plan ALL, fix ALL, submit ONCE
+  # STEP A: Read ALL deep findings across every section
+  # STEP B: Plan fixes for each finding
+  OUTPUT: "Review-fix round {round}/10: fixing {N} deep findings (deep: {deep_score}/5, target: 5/5)"
+  # STEP C: Fix ALL findings across ALL files
+  for each file that needs changes:
+    dk_file_write(path, fixed_content)
+    if conflict_warnings → resolve (see Step 3)
+  # STEP D: Submit complete batch
   round += 1
-  if round > 3:
-    OUTPUT: "Max review rounds reached — final score: {score}/5"
+  if round > 10:
+    OUTPUT: "Max review rounds reached — local: {local_score}/5, deep: {deep_score}/5"
     break
   dk_submit(intent)
   # loop continues — re-check local before waiting for deep again
 
-# If loop exits at round 1 with a clean score (no findings at all):
-OUTPUT: "Review complete — score: {score}/5 after 1 round"
+# If loop exits at round 1 with perfect scores:
+OUTPUT: "Review complete — local: {local_score}/5, deep: {deep_score}/5 after 1 round"
 ```
+
+**CRITICAL: Fix ALL findings before submitting.** Each submit costs a round. If you fix
+one finding per submit, you'll exhaust your rounds fixing 10 issues one at a time. Instead:
+read all findings → plan all fixes → apply all fixes → submit once. This maximizes the
+score improvement per round.
 
 **These status messages are mandatory.** They appear in the dkod-app activity feed and
 let the user know which review-fix round you're on, how many findings you're fixing, and
