@@ -291,8 +291,11 @@ After dk_verify for each changeset:
    - **Deep score < 5 OR has "error" findings** → re-dispatch generator to fix
    - **Deep review not yet complete** → call `dk_watch(filter: "changeset.review.completed")`
      to wait for it, then `dk_review` again
-4. **`review_round[unit_id]` >= 10** → max rounds reached. If local ≥ 4/5, proceed to
-   approve with the best available changeset. Log a warning with the final scores.
+4. **`review_round[unit_id]` >= 10** → max rounds reached, hard exit:
+   - If local ≥ 4/5 → proceed to approve with the best available changeset. Log a warning.
+   - If local < 4/5 → skip this unit. Record it in `merge_failures` with reason
+     "review gate exhausted: local score X/5 after 10 rounds". Do NOT approve or merge.
+     The evaluator will catch the missing functionality.
 
 **Re-dispatch flow (when scores don't meet gates):**
 5. **Close the old changeset** before re-dispatch: `dk_close(session_id)`
