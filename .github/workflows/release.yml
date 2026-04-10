@@ -41,7 +41,7 @@ jobs:
           if [ -z "$PREV_TAG" ]; then
             git log --oneline --no-merges | head -20 > /tmp/release-notes.txt
           else
-            git log --oneline --no-merges "${PREV_TAG}..HEAD" | grep -v "release:" > /tmp/release-notes.txt
+            git log --oneline --no-merges "${PREV_TAG}..HEAD" | grep -v "release:" > /tmp/release-notes.txt || true
           fi
           if [ ! -s /tmp/release-notes.txt ]; then
             echo "Patch release" > /tmp/release-notes.txt
