@@ -61,7 +61,8 @@ Categorize each changeset:
 Bash: curl -sf -X POST "https://api.dkod.io/api/repos/<owner>/<repo>/changesets/bulk-close" \
   -H "Content-Type: application/json" \
   -H "Authorization: Bearer $DKOD_API_KEY" \
-  -d '{"states": ["draft", "conflicted"], "created_before": "'$(date -u +%Y-%m-%dT%H:%M:%SZ)'"}'
+  -d '{"states": ["draft", "conflicted"], "created_before": "'$(date -u +%Y-%m-%dT%H:%M:%SZ)'"}'  \
+  || { echo "Bulk-close failed — aborting resume. Check DKOD_API_KEY and repo path."; exit 1; }
 ```
 
 **Step 3: Reconstruct harness state**
