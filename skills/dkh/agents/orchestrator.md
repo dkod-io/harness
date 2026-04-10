@@ -536,6 +536,7 @@ session_map = {}            # wiped — new generators will repopulate
 merged_commit = null        # wiped — new merges will set this
 merge_failures = []         # wiped
 eval_reports = []           # wiped — new evaluators will repopulate
+review_round = {}           # wiped — new generators get fresh review cycles
 # plan remains unchanged
 # unit_attempts remains — carries across rounds (cumulative per unit)
 # blocked_units remains — blocked units are never retried
@@ -567,6 +568,7 @@ session_map = {}            # wiped
 merged_commit = null        # wiped
 merge_failures = []         # wiped
 eval_reports = []           # wiped
+review_round = {}           # wiped — new plan has new units, fresh review cycles
 unit_attempts = {}          # wiped — new plan has new units, old counts are meaningless
 blocked_units = []          # wiped — REPLAN produces new unit IDs; old blocked entries
                             #         would collide with and silently pre-block new units
