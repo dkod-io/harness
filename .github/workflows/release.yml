@@ -4,6 +4,10 @@ on:
   push:
     branches: [main]
 
+concurrency:
+  group: release
+  cancel-in-progress: false
+
 permissions:
   contents: write
 
@@ -66,6 +70,13 @@ jobs:
           git add skills/dkh/SKILL.md .claude-plugin/plugin.json
           git commit -m "release: v${NEW} [skip ci]"
           git push
+
+      - name: Create and push tag
+        env:
+          TAG: ${{ steps.version.outputs.tag }}
+        run: |
+          git tag "$TAG"
+          git push origin "$TAG"
 
       - name: Generate release notes
         env:
