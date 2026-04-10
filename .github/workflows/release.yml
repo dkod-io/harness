@@ -95,4 +95,4 @@ jobs:
             --title "release: ${TAG}" \
             --body "Auto-generated version bump to ${NEW}. Created by release workflow.")
 
-          gh pr merge "$PR_URL" --auto --squash
+          gh pr merge "$PR_URL" --squash --admin
