@@ -10,64 +10,37 @@ permissions:
 jobs:
   release:
     runs-on: ubuntu-latest
-    # Skip if this push was the auto-bump commit (prevents infinite loop)
     if: "!contains(github.event.head_commit.message, '[skip ci]')"
     steps:
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0
-          token: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Read current version and bump patch
+      - name: Read current version from SKILL.md
         id: version
         run: |
-          CURRENT=$(grep '^version:' skills/dkh/SKILL.md | head -1 | awk '{print $2}' | tr -d '[:space:]')
-          if [ -z "$CURRENT" ]; then
+          VERSION=$(grep '^version:' skills/dkh/SKILL.md | head -1 | awk '{print $2}' | tr -d '[:space:]')
+          if [ -z "$VERSION" ]; then
             echo "No version found in SKILL.md frontmatter"
             exit 1
           fi
-          echo "current=${CURRENT}" >> "$GITHUB_OUTPUT"
+          TAG="v${VERSION}"
+          echo "version=${VERSION}" >> "$GITHUB_OUTPUT"
+          echo "tag=${TAG}" >> "$GITHUB_OUTPUT"
 
-          # Bump patch: 0.1.2 -> 0.1.3
-          MAJOR=$(echo "$CURRENT" | cut -d. -f1)
-          MINOR=$(echo "$CURRENT" | cut -d. -f2)
-          PATCH=$(echo "$CURRENT" | cut -d. -f3)
-          NEW_PATCH=$((PATCH + 1))
-          NEW_VERSION="${MAJOR}.${MINOR}.${NEW_PATCH}"
-
-          echo "new=${NEW_VERSION}" >> "$GITHUB_OUTPUT"
-          echo "tag=v${NEW_VERSION}" >> "$GITHUB_OUTPUT"
-          echo "Bumping: ${CURRENT} -> ${NEW_VERSION}"
-
-      - name: Update version in SKILL.md and plugin.json
+      - name: Check if tag already exists
+        id: check_tag
         env:
-          CURRENT: ${{ steps.version.outputs.current }}
-          NEW: ${{ steps.version.outputs.new }}
+          TAG: ${{ steps.version.outputs.tag }}
         run: |
-          sed -i "s/^version: ${CURRENT}/version: ${NEW}/" skills/dkh/SKILL.md
-          if [ -f .claude-plugin/plugin.json ]; then
-            sed -i "s/\"version\": \"${CURRENT}\"/\"version\": \"${NEW}\"/" .claude-plugin/plugin.json
+          if git rev-parse "$TAG" >/dev/null 2>&1; then
+            echo "exists=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "exists=false" >> "$GITHUB_OUTPUT"
           fi
-
-          # Verify the bump worked
-          VERIFY=$(grep '^version:' skills/dkh/SKILL.md | head -1 | awk '{print $2}' | tr -d '[:space:]')
-          if [ "$VERIFY" != "$NEW" ]; then
-            echo "ERROR: Version bump failed. Expected ${NEW}, got ${VERIFY}"
-            exit 1
-          fi
-          echo "Version bumped to ${NEW}"
-
-      - name: Commit version bump
-        env:
-          NEW: ${{ steps.version.outputs.new }}
-        run: |
-          git config user.name "github-actions[bot]"
-          git config user.email "github-actions[bot]@users.noreply.github.com"
-          git add skills/dkh/SKILL.md .claude-plugin/plugin.json
-          git commit -m "release: v${NEW} [skip ci]"
-          git push
 
       - name: Generate release notes
+        if: steps.check_tag.outputs.exists == 'false'
         env:
           TAG: ${{ steps.version.outputs.tag }}
         run: |
@@ -75,15 +48,14 @@ jobs:
           if [ -z "$PREV_TAG" ]; then
             git log --oneline --no-merges | head -20 > /tmp/release-notes.txt
           else
-            # Exclude the auto-bump commit from notes
             git log --oneline --no-merges "${PREV_TAG}..HEAD" | grep -v "\[skip ci\]" > /tmp/release-notes.txt
           fi
-          # If empty (only skip-ci commits), add a placeholder
           if [ ! -s /tmp/release-notes.txt ]; then
             echo "Patch release" > /tmp/release-notes.txt
           fi
 
       - name: Create release
+        if: steps.check_tag.outputs.exists == 'false'
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           TAG: ${{ steps.version.outputs.tag }}
