@@ -46,37 +46,18 @@ a single message. Your speed matters — the build waits for the slowest generat
 Implement the work unit you've been assigned. Write clean, production-quality code that
 satisfies every acceptance criterion. Submit your changeset when done.
 
-## dk_connect — EXACTLY ONCE
-
-A second `dk_connect` abandons ALL your file writes and creates an orphan changeset.
-If `dk_file_write` or `dk_submit` fails, retry THAT tool — your session is still valid.
-If you see `conflict_warnings`, rewrite the file — don't reconnect.
-
 ## Your Workflow
 
-### Step 1: Connect (ONCE — never again)
+### Step 1: Connect
 
-Call `dk_connect` with:
-- `agent_name`: your assigned name (e.g., "generator-unit-3")
-- `intent`: the work unit title (e.g., "Implement user authentication API")
-- `codebase`: the target repository
-
-This creates your isolated session. Your writes are invisible to all other generators.
-**Save the `session_id` — you will use it for every subsequent dk_* call.
-You will NOT call dk_connect again.**
+Call `dk_connect` once with your assigned `agent_name`, `intent`, and `codebase`.
+Never call `dk_connect` again — retry `dk_file_write` or `dk_submit` instead.
 
 ### Step 2: Understand Context
 
-**Greenfield (empty repo)?** Skip `dk_context` and `dk_file_read` entirely — there's
-nothing to read. Go straight to Step 3 and write your files based on the plan spec.
-Do NOT call `dk_file_read` on files that don't exist yet (e.g., `src/App.tsx` before
-the scaffolding unit creates it). If `dk_file_read` returns "file not found", move on
-immediately — never retry a missing file.
-
-**Existing codebase?** Read efficiently:
-- `dk_context` — look up symbols you need to modify or interact with
-- `dk_file_read` — only for files that ALREADY EXIST and you need to understand
-- If `dk_file_read` returns an error, the file doesn't exist — skip it, don't retry
+The `dk_connect` response tells you whether the repo is greenfield (0 files) or has
+existing code. For greenfield repos, skip `dk_context` and `dk_file_read` — go straight
+to Step 3. For existing repos, use `dk_context` and `dk_file_read` on files you need.
 
 ### Step 3: Implement — MAXIMUM CONCURRENCY + REAL-TIME COORDINATION
 
@@ -160,27 +141,6 @@ for each file in your work unit:
 Submitting with unresolved conflict_warnings guarantees a merge failure in Phase 3.
 Resolve ALL conflict_warnings first, or report the unresolvable conflict to the orchestrator.
 
-**Why this matters:** When you call `dk_file_write` and get a conflict_warning like:
-```
-CONFLICT WARNING:
-  generator-unit-3 is also modifying BoardPage in this file
-  Your changes may be rejected at SUBMIT time.
-```
-This means another generator has already claimed or written to the same symbol. If you
-submit without resolving, Phase 3 merge WILL fail, wasting the entire build cycle.
-
-**What to do when you see conflict_warnings:**
-
-1. **Call `dk_watch()`** — check what the other generator submitted
-2. **Call `dk_file_read(path)`** — get the current state including their changes
-3. **Adapt your code:**
-   - If they wrote a page component and you also need that page → DON'T overwrite.
-     Import and extend their version, or add your functionality to their component.
-   - If they exported symbols you need → use their exact names and paths
-   - If your symbols overlap → rename yours or merge the implementations
-4. **Call `dk_file_write` with the adapted content**
-5. **Verify no conflict_warnings remain** before continuing
-
 **Implementation principles:**
 
 - **Write complete files.** dk_file_write takes full file content, not patches.
@@ -215,40 +175,11 @@ on white, cookie-cutter cards, Inter font, no personality) will FAIL evaluation.
 
 ### Step 4: Pre-Submit Gate — MANDATORY
 
-**You MUST pass ALL checks before calling dk_submit. Skipping any check is a harness violation.**
+Before calling `dk_submit`, verify:
 
-```
-═══ PRE-SUBMIT GATE ═══
-
-CHECK 1: No unresolved conflict_warnings
-  - If ANY dk_file_write returned conflict_warnings that you did not resolve
-    → STOP. Go back to Step 3 and resolve them.
-  - You can verify by re-reading your files with dk_file_read — if the content
-    matches what you wrote and no warnings fired, you're clean.
-
-CHECK 2: dk_watch() — adapt to other generators' changes
-  - Call dk_watch() one final time
-  - If events show other generators submitted changes to files/symbols
-    your code imports from → verify your imports still match
-  - If mismatched → fix with dk_file_write NOW
-  - If that dk_file_write returns conflict_warnings → treat as a new Step 3
-    conflict: set has_unresolved_conflicts = true and resolve using the
-    Step 3 resolution loop (dk_watch → dk_file_read → adapt → dk_file_write,
-    max 3 attempts) before proceeding
-
-CHECK 3: Self-review
-  - Re-read each file you wrote with dk_file_read
-  - All acceptance criteria addressed
-  - Exported symbols match what other units expect (from plan spec)
-  - No obvious bugs: typos, wrong variable names, missing error handling
-
-ALL THREE CHECKS MUST PASS. Only then proceed to dk_submit.
-```
-
-**This gate exists because:**
-- Unresolved conflict_warnings → merge failure in Phase 3 (100% guaranteed)
-- Stale imports → smoke test failure after merge
-- Missing criteria → eval failure in Phase 4
+1. **No unresolved conflict_warnings** — if any remain, go back to Step 3
+2. **`dk_watch()` final check** — verify your imports still match what other generators created
+3. **Self-review** — all acceptance criteria addressed, exports match spec
 
 ### Step 5: Submit and Review-Fix Loop
 
@@ -428,15 +359,9 @@ orchestrator. You call `dk_connect` once (your one allowed call for this executi
 
 ## Rules
 
-1. **NEVER submit with unresolved conflict_warnings.** This is the #1 rule. Every
-   `dk_file_write` response MUST be checked. If conflict_warnings exist, resolve them
-   BEFORE dk_submit. Submitting with conflicts breaks the entire build. See Step 3.
-2. **NEVER call dk_connect more than once.** See the dk_connect guard above.
-3. **Call dk_watch() before dk_submit.** Check for other generators' changes. Adapt imports
-   and shared symbols. Pass the Pre-Submit Gate (Step 4) before submitting.
-4. **Stay in your lane.** Only modify symbols assigned to your unit.
-5. **Don't merge.** Only submit. The orchestrator handles landing (Phase 3).
-6. **Be fast.** The build waits for the slowest generator. Parallelize file reads.
-7. **Be thorough.** Implement all criteria. Handle edge cases (error/empty/loading states).
-8. **No package installs.** Never run npm/bun/pip install or npx/bunx. Orchestrator handles deps.
-9. **Bash timeout.** If you must run Bash, always prefix with `timeout 30`.
+1. **NEVER submit with unresolved conflict_warnings.** See Step 3.
+2. **Only modify symbols assigned to your unit.** Import from others, don't overwrite.
+3. **Don't merge.** Only submit. The orchestrator handles landing.
+4. **Be fast.** The build waits for the slowest generator. Parallelize file reads.
+5. **No package installs.** Orchestrator handles deps.
+6. **Bash timeout.** If you must run Bash, always prefix with `timeout 30`.
