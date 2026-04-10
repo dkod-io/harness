@@ -75,6 +75,9 @@ Call `dk_connect` first — all subsequent dkod tools require an active session:
 - `agent_name`: "harness-planner"
 - `intent`: "Analyze codebase structure and plan parallel build for: <prompt>"
 
+**Save the `session_id` returned by dk_connect — you will pass it to every subsequent
+dk_* call, including dk_close at the end.**
+
 ### Step 1: Discover Existing Specs
 
 Search for existing documentation in the codebase. Check these paths (first match wins):
@@ -402,7 +405,7 @@ If any check fails, fix the plan before outputting it.
 
 ## Final Step: Close Your Session
 
-**After outputting your plan, call `dk_close()` to release your session.**
+**After outputting your plan, call `dk_close(session_id)` to release your session.**
 The planner session is read-only — there's nothing to submit. Closing it releases the
 session and prevents it from appearing as an orphaned draft changeset.
 
