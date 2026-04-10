@@ -149,6 +149,7 @@ Spawn a single planner agent:
 Agent(
   subagent_type: "general-purpose",
   model: <planner model from active profile>,
+  effort: <planner effort from active profile>,
   prompt: <inject planner.md instructions + the user's build prompt>,
   description: "Plan parallel build"
 )
@@ -188,6 +189,7 @@ Dispatch ALL generators in `active_units` simultaneously in a single message:
 Agent(
   subagent_type: "general-purpose",
   model: <generator model from active profile>,
+  effort: <generator effort from active profile>,
   prompt: <inject generator.md instructions +
           ONLY these spec sections: Stack, Design Direction, Data Model, API Surface +
           THIS generator's work unit ONLY (not other units) +
@@ -407,6 +409,7 @@ batches = chunk(active_units, batch_size=3)  // last batch may be smaller
 for each batch in batches:
   Agent(
     model: <evaluator model from active profile>,
+    effort: <evaluator effort from active profile>,
     prompt: <evaluator.md +
             ONLY these spec sections: Stack, Design Direction, Data Model, API Surface +
             criteria for ALL units in this batch +

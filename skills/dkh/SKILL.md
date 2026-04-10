@@ -82,16 +82,20 @@ without invoking the skill.
 **Active profile: quality**
 
 Each agent runs on a model appropriate to its task. The orchestrator reads the active
-profile and passes `model:` on every Agent dispatch call.
+profile and passes `model:` AND `effort:` on every Agent dispatch call.
 
-| Agent | quality | balanced | budget |
-|-------|---------|----------|--------|
-| **Orchestrator**\* | opus | opus | sonnet |
-| **Planner** | opus | opus | sonnet |
-| **Generator** | opus | sonnet | sonnet |
-| **Evaluator** | opus | sonnet | haiku |
+| Agent | quality | balanced | budget | effort |
+|-------|---------|----------|--------|--------|
+| **Orchestrator**\* | opus | opus | sonnet | high |
+| **Planner** | opus | opus | sonnet | max |
+| **Generator** | opus | sonnet | sonnet | high |
+| **Evaluator** | opus | sonnet | haiku | max |
 
 \* The orchestrator model is set by the invoking Claude Code session, not by this table. This row is a recommendation for the session model, not enforced by the harness.
+
+**Effort levels are mandatory.** Planner and Evaluator use `max` (complex reasoning —
+decomposition, scoring). Generator uses `high` (fast execution — file writes, not deep
+analysis). Always pass `effort:` when dispatching agents.
 
 - **quality** — All Opus. Maximum capability. Use for complex or high-stakes builds.
 - **balanced** (default) — Opus for planning and orchestration, Sonnet for implementation
