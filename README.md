@@ -1,3 +1,12 @@
+<p align="center">
+  <a href="https://dkod.io">
+    <picture>
+      <source media="(prefers-color-scheme: dark)" srcset="https://raw.githubusercontent.com/dkod-io/dkod-engine/main/.github/assets/banner-dark.svg">
+      <img alt="dkod — Agent-native code platform" src="https://raw.githubusercontent.com/dkod-io/dkod-engine/main/.github/assets/banner-dark.svg" width="100%">
+    </picture>
+  </a>
+</p>
+
 # dkod harness
 
 Autonomous harness for building complete applications from a single prompt.
