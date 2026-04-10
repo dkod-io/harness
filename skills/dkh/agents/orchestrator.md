@@ -252,7 +252,9 @@ Before proceeding, verify:
 - Re-dispatch. Do NOT proceed until all have submitted.
 
 **If gate passes** (all generators have status: submitted or conflict_blocked_after_submit, all have changeset_ids):
-→ set `changeset_ids = [...]` and verify `session_map` has an entry for each changeset_id.
+→ set `changeset_ids = [...]` and verify `session_map` has an entry for each changeset_id
+  **whose generator reported `submitted`** (conflict_blocked_after_submit sessions are
+  already closed and do not need a session_map entry).
 > **Gate 2 PASSED** — `changeset_ids: [id1, id2, ...]`, `active_units: [N units]`. Proceeding to Phase 3 (Land).
 
 ---
