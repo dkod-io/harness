@@ -238,7 +238,7 @@ Before proceeding, verify:
 1. Call `dk_close(session_id)` for each conflict_blocked generator (if not already closed above)
 2. For each conflict_blocked generator:
    - Increment `unit_attempts[unit_id]`
-   - If `unit_attempts[unit_id] >= 3` → move to `blocked_units`, skip re-dispatch
+   - If `unit_attempts[unit_id] >= 3` → move to `blocked_units`, **remove from `active_units`**, skip re-dispatch
    - Otherwise → re-dispatch with feedback:
      "Your previous attempt was blocked by a conflict on <file> with <agent>.
      That agent's changeset is now submitted. Call dk_watch() first, adapt to their

@@ -106,22 +106,28 @@ for each file in your work unit:
   # 4. ═══ HARD GATE: CHECK conflict_warnings ═══
   if response contains conflict_warnings:
     has_unresolved_conflicts = true
+    attempts = 0
+    MAX_ATTEMPTS = 3
 
     # STOP writing new files. Resolve this conflict FIRST:
-    # a) The warning tells you WHO is modifying the same symbols
-    # b) Call dk_watch() to see their submitted changes
-    # c) Call dk_file_read(path) to get the current merged version
-    # d) Rewrite YOUR file to work alongside THEIR changes
-    #    - Keep their exports/symbols intact
-    #    - Adjust your code to complement, not overwrite
-    #    - Use their import paths and export names
-    # e) Call dk_file_write(path, adapted_content)
-    # f) If the new response has NO conflict_warnings → resolved
-    #    has_unresolved_conflicts = false
-    #    Continue with remaining files
-    # g) If conflict_warnings PERSIST after 3 attempts → STOP.
-    #    Report to orchestrator: "Unresolvable conflict on <path> with <agent>"
-    #    Do NOT proceed to dk_submit.
+    while response contains conflict_warnings AND attempts < MAX_ATTEMPTS:
+      attempts += 1
+      # a) The warning tells you WHO is modifying the same symbols
+      # b) Call dk_watch() to see their submitted changes
+      # c) Call dk_file_read(path) to get the current merged version
+      # d) Rewrite YOUR file to work alongside THEIR changes
+      #    - Keep their exports/symbols intact
+      #    - Adjust your code to complement, not overwrite
+      #    - Use their import paths and export names
+      # e) response = dk_file_write(path, adapted_content)
+
+    if response contains no conflict_warnings:
+      has_unresolved_conflicts = false   # resolved — continue with remaining files
+    else:
+      # All 3 attempts exhausted — conflict is unresolvable
+      # STOP. Report to orchestrator using Template B (or Template C if
+      # a dk_submit already succeeded in an earlier round).
+      # Do NOT proceed to dk_submit.
 ```
 
 **═══ SUBMIT GATE ═══**
@@ -199,7 +205,11 @@ CHECK 2: dk_watch() — adapt to other generators' changes
   - Call dk_watch() one final time
   - If events show other generators submitted changes to files/symbols
     your code imports from → verify your imports still match
-  - If mismatched → fix with dk_file_write NOW (and check for conflict_warnings!)
+  - If mismatched → fix with dk_file_write NOW
+  - If that dk_file_write returns conflict_warnings → treat as a new Step 3
+    conflict: set has_unresolved_conflicts = true and resolve using the
+    Step 3 resolution loop (dk_watch → dk_file_read → adapt → dk_file_write,
+    max 3 attempts) before proceeding
 
 CHECK 3: Self-review
   - Re-read each file you wrote with dk_file_read
