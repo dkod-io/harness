@@ -426,6 +426,7 @@ for each batch in batches:
 // Final evaluator for overall/integration criteria:
 Agent(
   model: <evaluator model from active profile>,
+  effort: <evaluator effort from active profile>,
   prompt: <evaluator.md + spec summary + overall criteria +
            "Test integration across all units. Verify full app end-to-end.
             Server at <SERVER_URL>. Exclusive browser access.
