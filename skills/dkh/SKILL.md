@@ -38,16 +38,57 @@ because dkod's AST-level merge eliminates false conflicts.
 
 When the user sends `/dkh continue` (or just "continue"):
 
+**═══ MANDATORY: RECOVER STATE AND CLEAN UP BEFORE RESUMING ═══**
+
+**Before re-dispatching ANY generators**, recover the state from the interrupted session
+and clean up only what's incomplete. Do NOT bulk-close everything — submitted changesets
+represent completed work that must be preserved.
+
+**Step 1: Query dkod for existing changesets**
+Call `dk_status` or list changesets via the API to see what the interrupted session left behind.
+Categorize each changeset:
+
+- **`submitted` state** → KEEP. This generator finished its work. Record its changeset_id.
+  Do NOT close it. Do NOT re-dispatch this unit.
+- **`approved` state** → KEEP. This changeset passed review and is ready to merge.
+  Record its changeset_id. Proceed to merge in Phase 3.
+- **`draft` state** → INCOMPLETE. This generator was interrupted before dk_submit.
+  Mark this unit for re-dispatch.
+- **`conflicted` state** → STUCK. Mark this unit for re-dispatch.
+- **`rejected` state** → FAILED. Mark this unit for re-dispatch.
+
+**Step 2: Close incomplete/failed changesets and release their symbol claims**
+```
+# Close draft/conflicted/rejected — preserve submitted and approved
+Bash: curl -sf -X POST "https://api.dkod.io/api/repos/<owner>/<repo>/changesets/bulk-close" \
+  -H "Content-Type: application/json" \
+  -H "Authorization: Bearer $DKOD_API_KEY" \
+  -d '{"states": ["draft", "conflicted", "rejected"], "created_before": "'$(date -u +%Y-%m-%dT%H:%M:%SZ)'"}'  \
+  || { echo "Bulk-close failed — aborting resume. Check DKOD_API_KEY and repo path."; exit 1; }
+```
+
+**Step 3: Reconstruct harness state**
+- `changeset_ids` = list of submitted + approved changeset_ids from Step 1
+- `active_units` = units whose generators were incomplete (draft/conflicted/rejected/missing)
+- Units with submitted or approved changesets are DONE — skip them
+
+**Step 4: Resume with only the incomplete units**
+Re-dispatch only the generators for `active_units` (incomplete ones). The submitted
+changesets from completed generators are preserved — 20 minutes of work is not lost.
+
+Output: "Resuming harness — N/M generators completed before interruption. Re-dispatching K incomplete units."
+
+**Then proceed:**
+
 1. **If an active harness session exists** (the agent has state from a prior turn):
    - Output the current harness state and phase
-   - Show which agents are active and what they're doing
-   - Resume the harness loop from where it left off
-   - Example: "Resuming harness — currently in Phase 2: Build. 4/7 generators complete, 3 still running."
+   - Show which agents completed (submitted) vs need re-dispatch
+   - Resume the harness loop, skipping completed units
 
 2. **If no active harness session exists** (fresh context after app restart):
    - Acknowledge the command: "No active harness session found in this context."
    - Check for any active dkod sessions via `dk_status`
-   - If active sessions found, report their state
+   - If active sessions found, recover state as described above
    - If no sessions found, tell the user to start a new build with `/dkh <prompt>`
 
 **Never ignore a `/dkh continue` silently.** Always acknowledge with current status.
