@@ -255,9 +255,6 @@ LOOP while round ≤ 10:
     break
   dk_submit(intent)
   # loop continues — re-check local before waiting for deep again
-
-# If loop exits at round 1 with perfect scores:
-OUTPUT: "Review complete — local: {local_score}/5, deep: {deep_score}/5 after 1 round"
 ```
 
 **CRITICAL: Fix ALL findings before submitting.** Each submit costs a round. If you fix
