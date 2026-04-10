@@ -246,20 +246,21 @@ ALL units dispatch simultaneously → 6 agents at once
 
 **Key patterns in this decomposition:**
 
-1. **Every symbol has exactly ONE owner.** The `App` component is owned by Unit 1 and ONLY
-   Unit 1. No other unit writes to `App`. This prevents true conflicts.
+1. **Every SYMBOL has exactly ONE owner — but files CAN be shared.** dkod uses AST-level
+   merging, not line diffing. Two generators writing DIFFERENT symbols to the same file
+   is perfectly fine — dkod auto-merges them (soft conflict). Two generators writing the
+   SAME symbol is a true conflict that must be avoided via ownership assignment.
 
-2. **No two units write to the same file.** If `src/store/hooks.ts` has shared hooks,
-   ONE unit owns that file and writes ALL the hooks. Other units that need hooks define
-   them locally in their own files (e.g., `src/features/team/hooks.ts`). Shared files
-   like `store/hooks.ts`, `utils/helpers.ts`, `types/index.ts` are conflict magnets —
-   assign them to exactly one unit or split them into per-feature files.
+2. **Multiple units CAN write to the same file.** Unit 2 can add `loginHandler()` to
+   `src/api/routes.ts` while Unit 3 adds `createTask()` to the same file — dkod merges
+   both at the AST level. Don't artificially split files to avoid sharing — that defeats
+   the purpose of dkod's parallel merge capability.
 
-3. **Units inline their own types AND hooks.** Unit 5 (Task list UI) defines its own
-   `Task` interface AND its own hooks locally instead of importing from shared files.
-   This eliminates cross-unit file conflicts entirely.
+3. **Units inline their own types.** Unit 5 (Task list UI) defines its own `Task` interface
+   locally instead of importing from Unit 3. This keeps units independent without requiring
+   sequencing.
 
-4. **All 6 units dispatch simultaneously.** 6 agents run at once.
+4. **All 6 units dispatch simultaneously.** 6 agents run at once. Maximum concurrency.
 
 ### Step 5: Assign Symbol Ownership
 
@@ -404,10 +405,8 @@ if any check fails — save a round trip by catching it yourself:
 - [ ] Overall acceptance criteria exist (app starts, no console errors, responsive, etc.)
 - [ ] **For UI projects**: Design Direction section exists with specific tone (not "modern
   and clean"), hex color values, and named font choices (not Arial/Inter/Roboto)
-- [ ] **No two units create files in the same path.** Check all `Creates:` fields — if two
-  units list the same file path, one of them must be moved to a per-feature file. Shared
-  files (`store/hooks.ts`, `utils/helpers.ts`, `types/index.ts`) are conflict magnets.
-  Either assign to one unit or split into `features/<name>/hooks.ts` per unit.
+- [ ] **No two units own the same SYMBOL** (same file is fine — dkod AST-merges different
+  symbols in the same file automatically). Check OWNS lists for duplicate symbol names.
 
 If any check fails, fix the plan before outputting it.
 
