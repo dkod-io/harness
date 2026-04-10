@@ -75,7 +75,17 @@ jobs:
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
           git checkout -b "$BRANCH"
-          git add skills/dkh/SKILL.md .claude-plugin/plugin.json
+          git add skills/dkh/SKILL.md
+          if [ -f .claude-plugin/plugin.json ]; then
+            git add .claude-plugin/plugin.json
+          fi
+
+          # Only proceed if there are staged changes
+          if git diff --cached --quiet; then
+            echo "No version changes to commit — skipping bump PR"
+            exit 0
+          fi
+
           git commit -m "release: ${TAG} — bump version to ${NEW}"
           git push origin "$BRANCH"
 
