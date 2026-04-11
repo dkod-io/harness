@@ -313,8 +313,18 @@ while merge_attempts < MAX_MERGE_ATTEMPTS:
       dk_file_write(path, adapted_content)
     # 3. Re-submit with the updated code
     dk_submit(intent)
-    # 4. Re-verify and re-approve before retrying merge
-    dk_verify(changeset_id)
+    # 4. Re-verify — if verify fails, fix and re-submit (same as Step 5b)
+    verify_result = dk_verify(changeset_id)
+    if verify_result has failures:
+      # Fix verify issues, re-submit, re-verify until clean
+      # (same fix loop as Step 5b — don't skip verification)
+      break  # report as conflict_unresolved if can't pass verify
+    # 5. Run at least one local review check before approving
+    #    (adapted code may introduce regressions or style violations)
+    dk_review(changeset_id)
+    if local_score < 4 OR has severity:"error":
+      # Fix review findings, re-submit, re-verify
+      break  # report as conflict_unresolved if can't pass review
     dk_approve(changeset_id)
     continue   # retry dk_merge with the new submission
 
