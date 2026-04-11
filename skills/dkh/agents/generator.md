@@ -54,7 +54,7 @@ Never call `dk_connect` again — retry `dk_file_write` or `dk_submit` instead.
 
 **Save the `session_id` from the response.** You MUST pass `session_id` explicitly on
 EVERY subsequent `dk_*` call (`dk_file_read`, `dk_file_write`, `dk_context`, `dk_submit`,
-`dk_watch`, `dk_review`, `dk_verify`, `dk_approve`, `dk_merge`, `dk_close`). Multiple
+`dk_watch`, `dk_review`, `dk_verify`, `dk_approve`, `dk_merge`, `dk_resolve`, `dk_close`). Multiple
 generators run in parallel sharing the same MCP process — without an explicit `session_id`,
 the MCP bridge cannot determine which session a call belongs to and will return
 `MCP error -32602: Multiple sessions active`.
