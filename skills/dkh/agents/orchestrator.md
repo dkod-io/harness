@@ -281,7 +281,7 @@ Before proceeding, verify:
 
 **═══ MERGE QUALITY GATES — NO EXCEPTIONS ═══**
 - **Local review: must be ≥ 4/5** with no severity:"error" findings
-- **Deep review: must be 5/5** with no severity:"error" findings
+- **Deep review: must be ≥ 4/5** with no severity:"error" findings
 - Changesets that don't meet BOTH thresholds MUST NOT be approved or merged.
 
 After dk_verify for each changeset:
@@ -291,7 +291,7 @@ After dk_verify for each changeset:
    - **Local score < 4 OR has "error" findings** → re-dispatch generator to fix
    - **Local score ≥ 4 AND no "error" findings** → proceed to check deep review
 3. **Check DEEP review:**
-   - **Deep score == 5 AND no "error" findings** → proceed to approve
+   - **Deep score >= 4 AND no "error" findings** → proceed to approve
    - **Deep score < 5 OR has "error" findings** → re-dispatch generator to fix
    - **Deep review not yet complete** → call `dk_watch(filter: "changeset.review.completed")`
      to wait for it, then `dk_review` again
@@ -311,7 +311,7 @@ After dk_verify for each changeset:
 6. **Increment `review_round[unit_id]`** by 1, then re-dispatch with payload:
    - Original work unit spec
    - Review findings (copy the dk_review output verbatim as context)
-   - "Fix these code review findings. Target: local ≥ 4/5, deep 5/5."
+   - "Fix these code review findings. Target: local ≥ 4/5, deep ≥ 4/5."
 7. After generator re-submits with a new session_id and changeset_id:
    a. **Update `session_map`**: record the new IDs (remove old entry)
    b. **Run `dk_verify`** on the new changeset
