@@ -63,9 +63,9 @@ dk_file_write(path: "src/api/tasks.ts", content: "<full file content>")
 
 **If `status: "locked"` is returned:**
 ```
-dk_watch(filter: "symbol.lock.released")   # blocks until their lock releases
-dk_file_read(path)                          # read their merged code
-dk_file_write(path, adapted_content)        # write alongside their code
+dk_watch(filter: "symbol.lock.released", wait: true)   # blocks until lock releases
+dk_file_read(path)                                      # read their merged code
+dk_file_write(path, adapted_content)                    # write alongside their code
 ```
 
 **Lock lifecycle:** Acquired on `dk_file_write`, held through submit/review/merge,
@@ -332,7 +332,7 @@ LOOP while round ≤ 3:
     continue           → re-check local on the new submission
 
   # 2. Local is clean — wait for DEEP review
-  dk_watch(filter: "changeset.review.completed")  — blocks, zero LLM cost
+  dk_watch(filter: "changeset.review.completed", wait: true)  — blocks, zero LLM cost
   dk_review(changeset_id) → deep findings + score
 
   # 3. Check deep review

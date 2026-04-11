@@ -97,9 +97,9 @@ response MUST be checked for two conditions:
 1. **SYMBOL_LOCKED** — Another generator holds the lock on a symbol you're trying to write.
    Your write DID NOT happen. You must wait and retry:
    ```
-   dk_watch(filter: "symbol.lock.released")   ← blocks until their lock releases (they merged)
-   dk_file_read(path)                          ← read the file with their merged code
-   dk_file_write(path, adapted_content)        ← write your symbols alongside theirs
+   dk_watch(filter: "symbol.lock.released", wait: true)   ← blocks until lock releases (they merged)
+   dk_file_read(path)                                      ← read the file with their merged code
+   dk_file_write(path, adapted_content)                    ← write your symbols alongside theirs
    ```
 
 2. **conflict_warnings** (legacy) — Informational warning that another generator is active
@@ -136,9 +136,9 @@ for each file in your work unit:
   if response.status == "locked":
     # SYMBOL_LOCKED — another generator holds this symbol
     # Wait for their lock to release (they will merge), then retry
-    dk_watch(filter: "symbol.lock.released")   # blocks until lock releases
-    dk_file_read(path)                          # read their merged code
-    response = dk_file_write(path, adapted_content)  # write alongside theirs
+    dk_watch(filter: "symbol.lock.released", wait: true)   # blocks until lock releases
+    dk_file_read(path)                                      # read their merged code
+    response = dk_file_write(path, adapted_content)         # write alongside theirs
     # If still locked after 3 retries → report as blocked_timeout
 
   if response contains conflict_warnings:
@@ -245,7 +245,7 @@ LOOP while round ≤ 10:
     continue
 
   # ═══ LOCAL IS CLEAN (≥ 4/5) — CHECK DEEP REVIEW ═══
-  dk_watch(filter: "changeset.review.completed")
+  dk_watch(filter: "changeset.review.completed", wait: true)
   dk_review(changeset_id) → get deep findings + score
 
   if deep_score >= 4 AND no severity:"error" findings:
