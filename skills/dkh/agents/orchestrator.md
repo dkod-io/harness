@@ -129,6 +129,40 @@ Bash: curl -sf -X POST "https://api.dkod.io/api/repos/<owner>/<repo>/changesets/
   -d '{"states": ["draft", "submitted", "approved", "rejected"], "created_before": "'$(date -u +%Y-%m-%dT%H:%M:%SZ)'"}'
 ```
 
+### Tool Detection — Run Once During PRE-FLIGHT
+
+Detect preferred tools and store flags for all subsequent agent dispatches:
+
+```bash
+# 1. Detect Playwright (@playwright/test)
+HAS_PLAYWRIGHT=false
+timeout 10 npx playwright --version 2>/dev/null && HAS_PLAYWRIGHT=true
+
+# 2. Detect DESIGN.md (awesome-design-md design system)
+# Check all paths the planner searches: DESIGN.md, design.md, docs/DESIGN.md, docs/design.md
+HAS_DESIGN_MD=false
+( [ -f DESIGN.md ] || [ -f design.md ] || [ -f docs/DESIGN.md ] || [ -f docs/design.md ] ) && HAS_DESIGN_MD=true
+```
+
+**Output detection results to the user:**
+```
+🔍 Tool detection:
+  Playwright CLI: {HAS_PLAYWRIGHT ? "✅ found" : "❌ not found — will use chrome-devtools MCP"}
+  DESIGN.md:      {HAS_DESIGN_MD ? "✅ found — using as design system" : "❌ not found — will use frontend-design skill"}
+```
+
+**If `HAS_PLAYWRIGHT = false`:**
+Output: `"💡 dkod recommends using Playwright for more reliable browser testing: npm i -D @playwright/test && npx playwright install chromium"`
+
+**If `HAS_DESIGN_MD = false` and the project has UI:**
+Output: `"💡 dkod recommends using a DESIGN.md file for higher-quality frontend design. Browse options at https://github.com/VoltAgent/awesome-design-md"`
+
+**Pass these flags to every agent dispatch:**
+- Planner: include `HAS_DESIGN_MD` in the prompt
+- Generators: include `HAS_DESIGN_MD` in the prompt
+- Evaluators: include `HAS_PLAYWRIGHT` in the prompt
+- Smoke test: use `HAS_PLAYWRIGHT` to choose browser tool
+
 Proceed to Phase 1.
 
 ---
@@ -147,7 +181,8 @@ Agent(
   subagent_type: "general-purpose",
   model: <planner model from active profile>,
   effort: <planner effort from active profile>,
-  prompt: <inject planner.md instructions + the user's build prompt>,
+  prompt: <inject planner.md instructions + the user's build prompt +
+          "HAS_DESIGN_MD = <true|false>.">,
   description: "Plan parallel build"
 )
 ```
@@ -195,7 +230,8 @@ Agent(
           THIS generator's work unit ONLY (not other units) +
           Aggregation Symbols table (so generators know what NOT to touch) +
           File Manifest table (so generators know EXACT import paths for all symbols) +
-          "CRITICAL: Use dk_connect → dk_file_write → dk_submit → dk_verify →
+          "HAS_DESIGN_MD = <true|false>.
+           CRITICAL: Use dk_connect → dk_file_write → dk_submit → dk_verify →
            dk_approve → dk_merge. You own the full pipeline through merge.
            NEVER use Write, Edit, or Bash to create/modify source files.
            Report your merged_commit hash when done.">,
@@ -207,7 +243,8 @@ Agent(
 
 **Do NOT send every unit's details to every generator.** Each generator only needs:
 the tech stack, design direction, data model, its own unit, the aggregation table,
-and the file manifest. Other units' acceptance criteria are noise that wastes context tokens.
+the file manifest, and the `HAS_DESIGN_MD` flag. Other units' acceptance criteria are
+noise that wastes context tokens.
 
 Wait for all generators to complete. **Generators now own the full pipeline** — each
 generator submits, reviews, approves, and merges its own changeset autonomously.
@@ -284,9 +321,48 @@ tokens testing a broken app. Fix the build first.
 1. Install dependencies: `bun install`
 2. Start the dev server: `bun run dev`
 3. Wait for the server to be ready (check the port)
-4. **Verify the app loads** — use chrome-devtools `navigate_page` + `take_screenshot` to
-   confirm the app renders something (not a blank page, not an error overlay, not a crash)
-5. **Check the console** — use `list_console_messages` to check for fatal errors
+4. **Verify the app loads** — use the detected browser tool:
+
+   **If `HAS_PLAYWRIGHT = true`:**
+   ```bash
+   timeout 30 node -e "
+     const { chromium } = require('playwright');
+     (async () => {
+       const browser = await chromium.launch();
+       const page = await browser.newPage();
+       await page.goto('<APP_URL>', { waitUntil: 'networkidle' });
+       await page.screenshot({ path: 'smoke-test.png' });
+       await browser.close();
+     })();
+   "
+   ```
+   Then read `smoke-test.png` to confirm it shows real content.
+
+   **If `HAS_PLAYWRIGHT = false`:**
+   Use chrome-devtools `navigate_page` + `take_screenshot` to confirm the app renders
+   something (not a blank page, not an error overlay, not a crash).
+
+5. **Check the console** — check for fatal errors:
+
+   **If `HAS_PLAYWRIGHT = true`:**
+   ```bash
+   timeout 30 node -e "
+     const { chromium } = require('playwright');
+     (async () => {
+       const browser = await chromium.launch();
+       const page = await browser.newPage();
+       const errors = [];
+       page.on('console', msg => { if (msg.type() === 'error') errors.push(msg.text()); });
+       await page.goto('<APP_URL>', { waitUntil: 'networkidle' });
+       await browser.close();
+       if (errors.length) { console.log('ERRORS:', JSON.stringify(errors)); process.exit(1); }
+       console.log('No fatal console errors');
+     })();
+   "
+   ```
+
+   **If `HAS_PLAYWRIGHT = false`:**
+   Use `list_console_messages` to check for fatal errors.
 
 **═══ SMOKE TEST GATE ═══**
 - [ ] Dev server started without crashing
@@ -324,12 +400,15 @@ dk_submit → dk_verify → dk_approve → dk_merge → dk_push branch → git c
 
 The dev server is already running from the smoke test. Do NOT start another one.
 
-Dispatch evaluators **sequentially** (one at a time) — they share a single chrome-devtools
-browser session. Do NOT instruct evaluators to start their own dev server.
+Dispatch evaluators **sequentially** (one at a time) — they share a single browser session
+(Playwright or chrome-devtools). Do NOT instruct evaluators to start their own dev server.
 
 **Batch units to minimize dispatches:** Group 2-3 work units per evaluator when units are
 related or test similar areas. Each evaluator receives the combined criteria for its batch
 and scores all of them. The final evaluator always handles overall/integration criteria.
+
+**CRITICAL: Pass `HAS_PLAYWRIGHT` to every evaluator dispatch.** This tells the evaluator
+which browser tool to use.
 
 ```
 // Group active_units into batches of 2-3 units each. Never batch_size=1 unless
@@ -346,6 +425,7 @@ for each batch in batches:
             criteria for ALL units in this batch +
             "The dev server is already running at <SERVER_URL>.
              Do NOT start another dev server. You have exclusive browser access.
+             HAS_PLAYWRIGHT = <true|false>.
              Score every criterion for all units in your batch.
              Time budget: <30 × len(batch)> minutes.">,
     description: "Eval: <batch unit titles>",
@@ -361,6 +441,7 @@ Agent(
   prompt: <evaluator.md + spec summary + overall criteria +
            "Test integration across all units. Verify full app end-to-end.
             Server at <SERVER_URL>. Exclusive browser access.
+            HAS_PLAYWRIGHT = <true|false>.
             Time budget: 30 minutes.">,
   description: "Eval: integration",
   name: "evaluator-integration"
@@ -369,14 +450,14 @@ Agent(
 
 Wait for the integration evaluator to complete. Then stop the dev server.
 
-**Why batch?** Each evaluator dispatch includes the full evaluator.md instructions (~190 lines).
+**Why batch?** Each evaluator dispatch includes the full evaluator.md instructions (~250 lines).
 Batching 2-3 units per evaluator cuts the number of dispatches (and thus instruction
 repetitions) by 50-66%, saving significant context tokens. The evaluator still tests every
 criterion — it just tests more criteria per session.
 
-**Why sequential?** Evaluators share chrome-devtools. Parallel evaluators would race on
-navigate/screenshot/click, corrupting evidence. This is the ONE phase where serialization
-is mandatory.
+**Why sequential?** Evaluators share browser state (Playwright or chrome-devtools). Parallel
+evaluators would race on navigate/screenshot/click, corrupting evidence. This is the ONE
+phase where serialization is mandatory.
 
 **═══ GATE 4 CHECK ═══**
 Before proceeding, verify:
