@@ -78,17 +78,22 @@ Call `dk_connect` first — all subsequent dkod tools require an active session:
 **Save the `session_id` returned by dk_connect — you will pass it to every subsequent
 dk_* call, including dk_close at the end.**
 
-### Step 1: Discover Existing Specs
+### Step 1: Discover Existing Specs and Design System
 
 Search for existing documentation in the codebase. Check these paths (first match wins):
 
 ```
 PRD.md, prd.md, SPEC.md, spec.md, REQUIREMENTS.md, requirements.md,
-DESIGN.md, design.md, docs/PRD.md, docs/prd.md, docs/SPEC.md, docs/spec.md,
-docs/DESIGN.md, docs/design.md, docs/REQUIREMENTS.md, docs/requirements.md
+docs/PRD.md, docs/prd.md, docs/SPEC.md, docs/spec.md,
+docs/REQUIREMENTS.md, docs/requirements.md
 ```
 
-Use `dk_file_list` to check which files exist, then `dk_file_read` to read the first match.
+**Also check for DESIGN.md** (design system from awesome-design-md):
+```
+DESIGN.md, design.md, docs/DESIGN.md, docs/design.md
+```
+
+Use `dk_file_list` to check which files exist, then `dk_file_read` to read matches.
 
 **If a spec file is found:**
 - Read it (cap at 100KB — if larger, read the first 100KB and note the truncation)
@@ -99,6 +104,19 @@ Use `dk_file_list` to check which files exist, then `dk_file_read` to read the f
 **If no spec file is found:**
 - Generate the full specification from scratch (current behavior)
 - This is the common case for greenfield projects
+
+**If a DESIGN.md file is found (or `HAS_DESIGN_MD = true` from orchestrator):**
+- Read it — this is an awesome-design-md design system document
+- It becomes the **authoritative design reference** for the project
+- Use it to populate the Design Direction section (see Step 3) instead of inventing one
+- Extract: color palette, typography, spacing, component styles, tone/aesthetic
+- Note in the spec: "Design system sourced from DESIGN.md (awesome-design-md)"
+- Generators will follow DESIGN.md directly — no frontend-design skill needed
+
+**If no DESIGN.md exists:**
+- Generate the Design Direction section from scratch (current behavior)
+- Add this note to the plan output:
+  `💡 dkod recommends using a DESIGN.md file for higher-quality frontend design. Browse options at https://github.com/VoltAgent/awesome-design-md`
 
 ### Step 2: Understand the Codebase
 
@@ -162,6 +180,19 @@ Produce a specification that covers:
 - **Build**: <bundler, package manager>
 
 ## Design Direction — MANDATORY for any project with UI
+
+**If DESIGN.md exists** (from awesome-design-md):
+<Summarize the key design tokens from DESIGN.md — colors, typography, spacing, component
+patterns, tone. Reference it as the authority: "See DESIGN.md for complete design system."
+Generators will read DESIGN.md directly and do NOT need the frontend-design skill.>
+
+- **Source**: DESIGN.md (awesome-design-md)
+- **Color palette**: <extracted from DESIGN.md with hex values>
+- **Typography**: <extracted from DESIGN.md — font families and weights>
+- **Component patterns**: <key patterns from DESIGN.md — buttons, cards, forms, etc.>
+- **Tone/aesthetic**: <derived from the design system's overall direction>
+
+**If no DESIGN.md exists** (generate from scratch):
 <This section is required. The frontend-design skill will be invoked by every
 generator that builds UI components. You must define the creative direction here
 so all generators produce a cohesive visual result.>
@@ -449,7 +480,8 @@ if any check fails — save a round trip by catching it yourself:
   have exactly one owner
 - [ ] Every work unit has 5+ testable acceptance criteria
 - [ ] Overall acceptance criteria exist (app starts, no console errors, responsive, etc.)
-- [ ] **For UI projects**: Design Direction section exists with specific tone (not "modern
+- [ ] **For UI projects**: Design Direction section exists — either sourced from DESIGN.md
+  (with extracted tokens) or generated from scratch with specific tone (not "modern
   and clean"), hex color values, and named font choices (not Arial/Inter/Roboto)
 - [ ] **No two units own the same SYMBOL** (same file is fine — dkod AST-merges different
   symbols in the same file automatically). Check OWNS lists for duplicate symbol names.

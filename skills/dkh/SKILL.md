@@ -5,13 +5,16 @@ description: >
   Autonomous harness for building complete applications from a single prompt. Uses dkod for
   parallel agent execution with AST-level semantic merging. Orchestrates a Planner that decomposes
   work by symbol into parallel units, N Generator agents that implement simultaneously via isolated
-  dkod sessions, and a skeptical Evaluator that tests the live result via chrome-devtools and
-  dk_verify. Fully autonomous — zero user interaction from prompt to working, tested PR.
+  dkod sessions, and a skeptical Evaluator that tests the live result via Playwright CLI (preferred)
+  or chrome-devtools MCP (fallback), plus dk_verify. Fully autonomous — zero user interaction
+  from prompt to working, tested PR.
   Use this skill whenever the user provides a build prompt ("build a...", "create a...",
   "make a...") or invokes /dkh.
 compatibility: >
-  Requires dkod MCP server (claude mcp add --transport http dkod https://api.dkod.io/mcp)
-  and chrome-devtools MCP for evaluation. Works with Claude Code and Opus 4.6.
+  Requires dkod MCP server (claude mcp add --transport http dkod https://api.dkod.io/mcp).
+  Evaluation: Playwright CLI (preferred) or chrome-devtools MCP (fallback).
+  Design: DESIGN.md from awesome-design-md (preferred) or frontend-design skill (fallback).
+  Works with Claude Code and Opus 4.6.
 ---
 
 # dkod Harness — Autonomous Parallel Build System
@@ -99,24 +102,51 @@ Before starting, verify these are available:
 
 1. **dkod MCP tools**: `dk_connect`, `dk_context`, `dk_file_write`, `dk_submit`, `dk_verify`,
    `dk_review`, `dk_approve`, `dk_merge`, `dk_push`, `dk_status`, `dk_watch`
-2. **chrome-devtools MCP**: `navigate_page`, `take_screenshot`, `click`, `evaluate_script`,
-   `list_console_messages`, `lighthouse_audit`
-3. **frontend-design skill**: Required for any project with UI. Generators MUST invoke
-   `Skill(skill: "frontend-design")` before implementing UI components. The planner MUST
-   include a Design Direction section in the spec. The evaluator MUST score design quality.
+
+2. **Browser testing (pick one — Playwright preferred):**
+   - **Playwright CLI** (preferred): Check with `timeout 10 npx playwright --version`. If
+     available, evaluators and smoke tests use Playwright CLI commands (`npx playwright
+     screenshot`, `npx playwright test`, etc.) instead of chrome-devtools MCP. Playwright
+     runs headless by default, needs no MCP server, and produces deterministic results.
+   - **chrome-devtools MCP** (fallback): `navigate_page`, `take_screenshot`, `click`,
+     `evaluate_script`, `list_console_messages`, `lighthouse_audit`. Used only if Playwright
+     is not installed.
+   - If NEITHER is available, evaluation falls to `dk_verify` + code review (no live UI testing).
+     Output: `"⚠️ dkod recommends using Playwright CLI for browser testing: npm i -D playwright @playwright/test && npx playwright install chromium"`
+
+3. **Design system (pick one — DESIGN.md preferred):**
+   - **DESIGN.md** (preferred): A design system file in the project root, sourced from
+     [awesome-design-md](https://github.com/VoltAgent/awesome-design-md). If present, it
+     becomes the authoritative design reference — the planner incorporates it into the spec,
+     generators follow it directly (no skill invocation needed), and the evaluator scores
+     against it. This produces more distinctive, brand-aligned UI than the generic skill.
+   - **frontend-design skill** (fallback): If no DESIGN.md exists, generators invoke
+     `Skill(skill: "frontend-design")` before implementing UI components. The planner still
+     generates a Design Direction section in the spec. The evaluator still scores design quality.
+     Output: `"💡 dkod recommends using a DESIGN.md file for higher-quality frontend design. Browse options at https://github.com/VoltAgent/awesome-design-md"`
+   - If NEITHER is available, generators follow the planner's Design Direction section manually.
+
+**Detection flow (run once during PRE-FLIGHT):**
+```
+# 1. Detect Playwright
+HAS_PLAYWRIGHT = false
+timeout 10 npx playwright --version 2>/dev/null && HAS_PLAYWRIGHT = true
+
+# 2. Detect DESIGN.md
+HAS_DESIGN_MD = false
+[ -f DESIGN.md ] && HAS_DESIGN_MD = true
+
+# Pass both flags to all agent dispatches:
+# - Planner: HAS_DESIGN_MD
+# - Generators: HAS_DESIGN_MD
+# - Evaluators: HAS_PLAYWRIGHT
+# - Smoke test: HAS_PLAYWRIGHT
+```
 
 If dkod is missing, guide installation:
 ```bash
 claude mcp add --transport http dkod https://api.dkod.io/mcp
 ```
-
-If chrome-devtools is missing, note that evaluation will be limited to `dk_verify` + code
-review (no live UI testing).
-
-If frontend-design skill is missing, generators MUST still follow the Design Direction section
-from the spec manually. The planner's Design Direction section provides all the creative
-direction needed — generators should treat it as their design brief and apply it directly
-without invoking the skill.
 
 ## Model Profiles
 

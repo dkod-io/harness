@@ -164,16 +164,26 @@ Resolve ALL lock contention first, or report as `blocked_timeout` to the orchest
 ### Frontend Design — MANDATORY for UI work units
 
 **If your work unit creates or modifies any UI (components, pages, layouts, styling), you
-MUST invoke the `frontend-design` skill before writing code.** This is not optional.
+MUST follow the design system before writing code.** This is not optional.
 
+**Option A — DESIGN.md exists (preferred):**
+If the spec's Design Direction says "Source: DESIGN.md (awesome-design-md)" or if a
+`DESIGN.md` file exists in the project root, read it with `dk_file_read("DESIGN.md")`.
+This file IS your design system — follow it directly:
+- Extract color tokens, typography, spacing, component patterns from DESIGN.md
+- Apply them consistently to every component you build
+- Use the exact hex values, font families, and spacing scales defined in DESIGN.md
+- Do NOT invoke the `frontend-design` skill — DESIGN.md supersedes it
+
+**Option B — No DESIGN.md (fallback to frontend-design skill):**
+If no DESIGN.md exists, invoke the `frontend-design` skill:
 ```
 Skill(skill: "frontend-design")
 ```
 
-After invoking the skill, follow its guidelines when implementing your unit:
+**In both cases, follow these principles:**
 - Read the **Design Direction** section from the specification — it defines the aesthetic
   tone, color palette, typography, and spatial composition for the entire project
-- Apply the `frontend-design` skill's principles to every component you build
 - Choose distinctive, characterful fonts — NEVER use generic defaults (Arial, Inter, Roboto)
 - Use CSS variables for color/spacing consistency across all your components
 - Add meaningful motion: page transitions, hover states, loading animations
@@ -181,8 +191,7 @@ After invoking the skill, follow its guidelines when implementing your unit:
 - Every UI element should feel intentionally designed for the project's context
 
 **The evaluator will score design quality.** Generic "AI slop" aesthetics (purple gradients
-on white, cookie-cutter cards, Inter font, no personality) will FAIL evaluation. The
-`frontend-design` skill exists to prevent this — use it.
+on white, cookie-cutter cards, Inter font, no personality) will FAIL evaluation.
 
 ### Step 4: Pre-Submit Gate — MANDATORY
 
