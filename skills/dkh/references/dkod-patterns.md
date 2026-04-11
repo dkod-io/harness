@@ -56,8 +56,20 @@ dk_file_write(path: "src/api/tasks.ts", content: "<full file content>")
 - Writes go to the session overlay only — invisible to other agents.
 - Always write the COMPLETE file content, not patches.
 - The response includes `detected_changes` — which symbols dkod detected as added/modified.
-- The response may include `conflict_warnings` if another agent has touched the same file.
-  Warnings are informational — they don't block the write.
+- **Symbol locking:** Each symbol you write acquires a lock. If another agent already holds
+  the lock on the same symbol, the write returns `status: "locked"` with details about
+  the lock holder. Your write DID NOT happen — you must wait and retry.
+- Different symbols in the same file do NOT contend — only same-symbol writes are blocked.
+
+**If `status: "locked"` is returned:**
+```
+dk_watch(filter: "symbol.lock.released")   # blocks until their lock releases
+dk_file_read(path)                          # read their merged code
+dk_file_write(path, adapted_content)        # write alongside their code
+```
+
+**Lock lifecycle:** Acquired on `dk_file_write`, held through submit/review/merge,
+released on `dk_merge` success, `dk_close`, or session timeout (30 min).
 
 ### Submit Phase
 
@@ -136,54 +148,47 @@ dk_push(mode: "pr", branch_name: "feat/task-management", pr_title: "...")
 - `"branch"` — push to a branch only
 - `"pr"` — push to branch + open GitHub PR
 
-## The Landing Pipeline
+## Streaming Merge Pipeline
 
-After all generators have submitted, the orchestrator runs the landing pipeline.
+Each generator owns its full pipeline: write → submit → verify → review → approve → merge.
+There is no batch phase — generators merge as soon as they pass review. Symbol locks
+ensure safe concurrent access at the engine level.
 
-### Sequential Landing
+### Generator Self-Merge Flow
 
 ```
-for each changeset:
-  1. dk_verify(changeset_id)
-     → if FAIL: record failures, skip to next
-  2. dk_approve()
-  3. dk_merge(commit_message)
-     → if MergeConflict: resolve and retry
-     → if OverwriteWarning: merge with force: true
-     → if MergeSuccess: continue
+# Each generator runs this autonomously:
+dk_connect(...)
+dk_file_write(...)         # acquires symbol locks
+dk_submit(intent)
+dk_verify(changeset_id)
+# review-fix loop (max 10 rounds)
+dk_approve(changeset_id)
+dk_merge(changeset_id)     # releases symbol locks → unblocks other generators
+dk_close(session_id)
 ```
 
-**Why sequential?** Each `dk_merge` creates a new commit. The next changeset's merge must
-rebase against the new HEAD. dkod handles this automatically (AST-level rebase), but the
-merges must happen one at a time.
+**Why streaming?** Symbol locks are held until merge. If generators submit-and-wait
+for batch merge, locks block other generators indefinitely (deadlock). Streaming merge
+releases locks as soon as each generator finishes, maximizing parallelism.
 
-**Ordering:** Merge order doesn't matter -- all units are independent. dkod auto-rebases
-each changeset against the latest HEAD.
-
-### Conflict Resolution Strategies
+### Conflict Resolution (by generators)
 
 **Auto-merge (no action needed):**
 - Different functions in the same file → dkod auto-merges
 - Different fields added to the same type → dkod auto-merges
 - Same import added by both agents → dkod deduplicates
 
-**Non-overlapping conflict (auto-resolve):**
+**MergeConflict:**
 ```
-dk_resolve(resolution: "proceed")
-→ reconnect and re-submit with updated base
+dk_resolve(resolution: "proceed")   # accept your changes
+dk_merge(changeset_id)              # retry
 ```
 
-**True conflict (orchestrator decides):**
-
-For the autonomous harness, use this decision tree:
-
-1. Is it a conflict between two independent units?
-   → `keep_yours` for the changeset being merged. The other changeset will auto-rebase
-   on its turn. If it can't, the evaluator will catch the integration issue.
-
-2. Is it a setup/scaffolding conflict (package.json, config files)?
-   → `keep_yours` with `force: true`. These are usually additive (both agents adding
-   dependencies or config entries) and dkod will merge them.
+**OverwriteWarning:**
+```
+dk_merge(changeset_id, force: true)  # your version is authoritative
+```
 
 ### Post-Landing Verification
 
