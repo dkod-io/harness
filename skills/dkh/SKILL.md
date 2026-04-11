@@ -113,8 +113,8 @@ Before starting, verify these are available:
    - **chrome-devtools MCP** (fallback): `navigate_page`, `take_screenshot`, `click`,
      `evaluate_script`, `list_console_messages`, `lighthouse_audit`. Used only if Playwright
      is not installed.
-   - If NEITHER is available, evaluation falls to `dk_verify` + code review (no live UI testing).
-     Output: `"⚠️ dkod recommends using Playwright for browser testing: npm i -D @playwright/test && npx playwright install chromium"`
+   - If Playwright is not found, ask the user during preflight (60s timeout, continue without if no response).
+   - If NEITHER Playwright nor chrome-devtools is available, evaluation falls to `dk_verify` + code review (no live UI testing).
 
 3. **Design system (pick one — DESIGN.md preferred):**
    - **DESIGN.md** (preferred): A design system file in the project root, sourced from
@@ -125,7 +125,7 @@ Before starting, verify these are available:
    - **frontend-design skill** (fallback): If no DESIGN.md exists, generators invoke
      `Skill(skill: "frontend-design")` before implementing UI components. The planner still
      generates a Design Direction section in the spec. The evaluator still scores design quality.
-     Output: `"💡 dkod recommends using a DESIGN.md file for higher-quality frontend design. Browse options at https://github.com/VoltAgent/awesome-design-md"`
+     If not found, ask the user during preflight (60s timeout, continue without if no response).
    - If NEITHER is available, generators follow the planner's Design Direction section manually.
 
 **Detection flow (run once during PRE-FLIGHT):**
