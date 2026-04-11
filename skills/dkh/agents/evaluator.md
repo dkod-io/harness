@@ -81,99 +81,33 @@ Otherwise, start the dev server yourself and track `I_STARTED_SERVER = true`.
 
 **After EVERY navigation, verify loading completes.**
 
-#### If `HAS_PLAYWRIGHT = true` — Playwright
+#### If `HAS_PLAYWRIGHT = true` — playwright-cli
 
-Use inline Node.js scripts via Bash with `timeout 30` prefix. All scripts use
-`require('playwright')` to launch a headless browser.
+Use `playwright-cli` for skills-less browser automation. No Node.js scripts needed.
 
 1. **Navigate + screenshot:**
    ```bash
-   timeout 30 node -e "
-     const { chromium } = require('playwright');
-     (async () => {
-       const browser = await chromium.launch();
-       const page = await browser.newPage();
-       await page.goto('<URL>', { waitUntil: 'networkidle' });
-       await page.screenshot({ path: 'screenshot-initial.png' });
-       await browser.close();
-     })();
-   "
+   playwright-cli screenshot <URL> screenshot-initial.png
    ```
 
-2. **Detect loading indicators:**
+2. **Execute script + screenshot** (for interactions, assertions):
    ```bash
-   timeout 30 node -e "
-     const { chromium } = require('playwright');
-     (async () => {
-       const browser = await chromium.launch();
-       const page = await browser.newPage();
-       await page.goto('<URL>', { waitUntil: 'networkidle' });
-       const result = await page.evaluate(() => {
-         const loadingEls = [...document.querySelectorAll('[aria-busy=\"true\"], [class*=\"spinner\"], [class*=\"loading\"], [class*=\"skeleton\"]')]
-           .filter(el => getComputedStyle(el).display !== 'none');
-         const loadingText = [...document.querySelectorAll('*')].filter(el =>
-           el.children.length === 0 && /^(loading|please wait)/i.test(el.textContent.trim()));
-         return { isLoading: loadingEls.length + loadingText.length > 0, count: loadingEls.length + loadingText.length };
-       });
-       console.log(JSON.stringify(result));
-       await browser.close();
-     })();
-   "
+   playwright-cli execute <URL> --script check.js --screenshot after.png
    ```
-   If loading, wait 10s and recheck. Still loading → **FAIL (3/10 max)**.
+   Write the script to a temp file first, then execute it. Scripts have access to
+   `page` (Playwright Page object) in the execution context.
 
-3. **Final screenshot** (must show real content):
+3. **Check console errors:**
    ```bash
-   timeout 30 node -e "
-     const { chromium } = require('playwright');
-     (async () => {
-       const browser = await chromium.launch();
-       const page = await browser.newPage();
-       await page.goto('<URL>', { waitUntil: 'networkidle' });
-       await page.screenshot({ path: 'screenshot-final.png' });
-       await browser.close();
-     })();
-   "
+   playwright-cli execute <URL> --script console-check.js
    ```
+   Script: `page.on('console', msg => { if (msg.type() === 'error') console.log(msg.text()); });`
 
-4. **Check console errors:**
-   ```bash
-   timeout 30 node -e "
-     const { chromium } = require('playwright');
-     (async () => {
-       const browser = await chromium.launch();
-       const page = await browser.newPage();
-       const errors = [];
-       page.on('console', msg => { if (msg.type() === 'error') errors.push(msg.text()); });
-       await page.goto('<URL>', { waitUntil: 'networkidle' });
-       await browser.close();
-       console.log(JSON.stringify({ errors, count: errors.length }));
-     })();
-   "
-   ```
-
-**Playwright testing patterns:**
-- **UI criteria:** screenshot → script (navigate, click, fill, assert) → screenshot
-- **API criteria:** `curl` via Bash or `page.evaluate(() => fetch(...))`
-- **Error handling:** submit empty forms, navigate to invalid routes, send bad API requests
-- **Responsive:** use `browser.newContext({ viewport: { width: 375, height: 812 } })` for
-  mobile, `{ width: 1440, height: 900 }` for desktop — screenshot each
-- **Interactions:**
-  ```bash
-  timeout 30 node -e "
-    const { chromium } = require('playwright');
-    (async () => {
-      const browser = await chromium.launch();
-      const page = await browser.newPage();
-      await page.goto('<URL>', { waitUntil: 'networkidle' });
-      await page.click('button:has-text(\"Submit\")');
-      await page.waitForTimeout(2000);
-      await page.screenshot({ path: 'after-click.png' });
-      console.log(JSON.stringify({ url: page.url(), title: await page.title() }));
-      await browser.close();
-    })();
-  "
-  ```
+**playwright-cli testing patterns:**
+- **UI criteria:** `playwright-cli screenshot <URL> <output.png>` → Read the image
+- **API criteria:** `curl` via Bash
+- **Interactions:** write a script file, then `playwright-cli execute <URL> --script <file>`
+- **Responsive:** `playwright-cli screenshot <URL> <output.png> --width 375 --height 812`
 
 #### If `HAS_PLAYWRIGHT = false` — chrome-devtools MCP (fallback)
 
