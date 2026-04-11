@@ -20,17 +20,16 @@ the criteria you receive (per-unit or integration).
 The orchestrator passes `HAS_PLAYWRIGHT` in your dispatch prompt. This determines which
 browser testing approach you use:
 
-**If `HAS_PLAYWRIGHT = true` → Use Playwright (preferred):**
-Playwright runs headless Chrome via inline Node.js scripts (`node -e "..."`). Use
-`require('playwright')` to launch browsers, navigate, screenshot, click, fill, and
-evaluate JS. More reliable and deterministic than MCP — no browser extension needed.
-All browser interactions in Steps 5a-5c below show both Playwright and chrome-devtools
-equivalents — use the Playwright versions.
+**If `HAS_PLAYWRIGHT = true` → Use playwright-cli (preferred):**
+Use `playwright-cli` CLI commands for browser automation — screenshots, script execution.
+More reliable and deterministic than MCP — no browser extension needed.
+All browser interactions in Steps 5a-5c below show both playwright-cli and chrome-devtools
+equivalents — use the playwright-cli versions.
 
 **If `HAS_PLAYWRIGHT = false` → Use chrome-devtools MCP (fallback):**
 Use the chrome-devtools MCP tools as documented in the fallback sections below.
 Output once at the start of your report:
-`"💡 dkod recommends using Playwright for more reliable browser testing: npm i -D @playwright/test && npx playwright install chromium"`
+`"💡 To enable playwright-cli: npm i -g @playwright/cli — see https://github.com/microsoft/playwright-cli"`
 
 **Time budget:** The orchestrator injects your time budget in the dispatch prompt (typically
 30 minutes per unit in your batch — e.g., 60 min for a 2-unit batch, 90 min for 3-unit).
@@ -163,30 +162,17 @@ renders but does nothing on click is broken — even if no criterion mentions it
 
 #### If `HAS_PLAYWRIGHT = true`
 
-1. **Discover elements** via Playwright script:
+1. **Discover elements** — write a script that finds all interactive elements, then:
    ```bash
-   timeout 30 node -e "
-     const { chromium } = require('playwright');
-     (async () => {
-       const browser = await chromium.launch();
-       const page = await browser.newPage();
-       await page.goto('<URL>', { waitUntil: 'networkidle' });
-       const elements = await page.evaluate(() => {
-         return [...document.querySelectorAll('button, [role=\"button\"], a[href], [onclick], [tabindex=\"0\"]')]
-           .filter(el => { const s = getComputedStyle(el); return s.display !== 'none' && s.visibility !== 'hidden' && el.offsetParent !== null; })
-           .filter(el => !el.disabled && el.getAttribute('aria-disabled') !== 'true')
-           .filter(el => !el.href || el.href.startsWith(location.origin) || el.href.startsWith('#'))
-           .map(el => ({ tag: el.tagName, text: (el.textContent||'').trim().slice(0,60), id: el.id||null }));
-       });
-       console.log(JSON.stringify(elements));
-       await browser.close();
-     })();
-   "
+   playwright-cli execute <URL> --script discover-elements.js
    ```
 
-2. **Test each element** via Playwright script: screenshot before → click → wait 5s →
-   screenshot after. Compare URL/title/content before and after.
-   Identical before/after → element is dead → **3/10 max**.
+2. **Test each element** — screenshot before → click → wait → screenshot after:
+   ```bash
+   playwright-cli screenshot <URL> before.png
+   playwright-cli execute <URL> --script click-element.js --screenshot after.png
+   ```
+   Compare before/after. Identical → element is dead → **3/10 max**.
 
 3. **Judgment calls:** Always test buttons with text, nav links, form submits. Skip decorative
    elements, disabled buttons, data-entry inputs. Sample 2-3 from identical lists.
