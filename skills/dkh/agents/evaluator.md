@@ -20,17 +20,16 @@ the criteria you receive (per-unit or integration).
 The orchestrator passes `HAS_PLAYWRIGHT` in your dispatch prompt. This determines which
 browser testing approach you use:
 
-**If `HAS_PLAYWRIGHT = true` → Use Playwright (preferred):**
-Playwright runs headless Chrome via inline Node.js scripts (`node -e "..."`). Use
-`require('playwright')` to launch browsers, navigate, screenshot, click, fill, and
-evaluate JS. More reliable and deterministic than MCP — no browser extension needed.
-All browser interactions in Steps 5a-5c below show both Playwright and chrome-devtools
-equivalents — use the Playwright versions.
+**If `HAS_PLAYWRIGHT = true` → Use playwright-cli (preferred):**
+Use `playwright-cli` CLI commands for browser automation — screenshots, script execution.
+More reliable and deterministic than MCP — no browser extension needed.
+All browser interactions in Steps 5a-5c below show both playwright-cli and chrome-devtools
+equivalents — use the playwright-cli versions.
 
 **If `HAS_PLAYWRIGHT = false` → Use chrome-devtools MCP (fallback):**
 Use the chrome-devtools MCP tools as documented in the fallback sections below.
 Output once at the start of your report:
-`"💡 dkod recommends using Playwright for more reliable browser testing: npm i -D @playwright/test && npx playwright install chromium"`
+`"💡 To enable playwright-cli: npm i -g @playwright/cli — see https://github.com/microsoft/playwright-cli"`
 
 **Time budget:** The orchestrator injects your time budget in the dispatch prompt (typically
 30 minutes per unit in your batch — e.g., 60 min for a 2-unit batch, 90 min for 3-unit).
@@ -81,99 +80,33 @@ Otherwise, start the dev server yourself and track `I_STARTED_SERVER = true`.
 
 **After EVERY navigation, verify loading completes.**
 
-#### If `HAS_PLAYWRIGHT = true` — Playwright
+#### If `HAS_PLAYWRIGHT = true` — playwright-cli
 
-Use inline Node.js scripts via Bash with `timeout 30` prefix. All scripts use
-`require('playwright')` to launch a headless browser.
+Use `playwright-cli` for skills-less browser automation. No Node.js scripts needed.
 
 1. **Navigate + screenshot:**
    ```bash
-   timeout 30 node -e "
-     const { chromium } = require('playwright');
-     (async () => {
-       const browser = await chromium.launch();
-       const page = await browser.newPage();
-       await page.goto('<URL>', { waitUntil: 'networkidle' });
-       await page.screenshot({ path: 'screenshot-initial.png' });
-       await browser.close();
-     })();
-   "
+   playwright-cli screenshot <URL> screenshot-initial.png
    ```
 
-2. **Detect loading indicators:**
+2. **Execute script + screenshot** (for interactions, assertions):
    ```bash
-   timeout 30 node -e "
-     const { chromium } = require('playwright');
-     (async () => {
-       const browser = await chromium.launch();
-       const page = await browser.newPage();
-       await page.goto('<URL>', { waitUntil: 'networkidle' });
-       const result = await page.evaluate(() => {
-         const loadingEls = [...document.querySelectorAll('[aria-busy=\"true\"], [class*=\"spinner\"], [class*=\"loading\"], [class*=\"skeleton\"]')]
-           .filter(el => getComputedStyle(el).display !== 'none');
-         const loadingText = [...document.querySelectorAll('*')].filter(el =>
-           el.children.length === 0 && /^(loading|please wait)/i.test(el.textContent.trim()));
-         return { isLoading: loadingEls.length + loadingText.length > 0, count: loadingEls.length + loadingText.length };
-       });
-       console.log(JSON.stringify(result));
-       await browser.close();
-     })();
-   "
+   playwright-cli execute <URL> --script check.js --screenshot after.png
    ```
-   If loading, wait 10s and recheck. Still loading → **FAIL (3/10 max)**.
+   Write the script to a temp file first, then execute it. Scripts have access to
+   `page` (Playwright Page object) in the execution context.
 
-3. **Final screenshot** (must show real content):
+3. **Check console errors:**
    ```bash
-   timeout 30 node -e "
-     const { chromium } = require('playwright');
-     (async () => {
-       const browser = await chromium.launch();
-       const page = await browser.newPage();
-       await page.goto('<URL>', { waitUntil: 'networkidle' });
-       await page.screenshot({ path: 'screenshot-final.png' });
-       await browser.close();
-     })();
-   "
+   playwright-cli execute <URL> --script console-check.js
    ```
+   Script: `page.on('console', msg => { if (msg.type() === 'error') console.log(msg.text()); });`
 
-4. **Check console errors:**
-   ```bash
-   timeout 30 node -e "
-     const { chromium } = require('playwright');
-     (async () => {
-       const browser = await chromium.launch();
-       const page = await browser.newPage();
-       const errors = [];
-       page.on('console', msg => { if (msg.type() === 'error') errors.push(msg.text()); });
-       await page.goto('<URL>', { waitUntil: 'networkidle' });
-       await browser.close();
-       console.log(JSON.stringify({ errors, count: errors.length }));
-     })();
-   "
-   ```
-
-**Playwright testing patterns:**
-- **UI criteria:** screenshot → script (navigate, click, fill, assert) → screenshot
-- **API criteria:** `curl` via Bash or `page.evaluate(() => fetch(...))`
-- **Error handling:** submit empty forms, navigate to invalid routes, send bad API requests
-- **Responsive:** use `browser.newContext({ viewport: { width: 375, height: 812 } })` for
-  mobile, `{ width: 1440, height: 900 }` for desktop — screenshot each
-- **Interactions:**
-  ```bash
-  timeout 30 node -e "
-    const { chromium } = require('playwright');
-    (async () => {
-      const browser = await chromium.launch();
-      const page = await browser.newPage();
-      await page.goto('<URL>', { waitUntil: 'networkidle' });
-      await page.click('button:has-text(\"Submit\")');
-      await page.waitForTimeout(2000);
-      await page.screenshot({ path: 'after-click.png' });
-      console.log(JSON.stringify({ url: page.url(), title: await page.title() }));
-      await browser.close();
-    })();
-  "
-  ```
+**playwright-cli testing patterns:**
+- **UI criteria:** `playwright-cli screenshot <URL> <output.png>` → Read the image
+- **API criteria:** `curl` via Bash
+- **Interactions:** write a script file, then `playwright-cli execute <URL> --script <file>`
+- **Responsive:** `playwright-cli screenshot <URL> <output.png> --width 375 --height 812`
 
 #### If `HAS_PLAYWRIGHT = false` — chrome-devtools MCP (fallback)
 
@@ -229,30 +162,17 @@ renders but does nothing on click is broken — even if no criterion mentions it
 
 #### If `HAS_PLAYWRIGHT = true`
 
-1. **Discover elements** via Playwright script:
+1. **Discover elements** — write a script that finds all interactive elements, then:
    ```bash
-   timeout 30 node -e "
-     const { chromium } = require('playwright');
-     (async () => {
-       const browser = await chromium.launch();
-       const page = await browser.newPage();
-       await page.goto('<URL>', { waitUntil: 'networkidle' });
-       const elements = await page.evaluate(() => {
-         return [...document.querySelectorAll('button, [role=\"button\"], a[href], [onclick], [tabindex=\"0\"]')]
-           .filter(el => { const s = getComputedStyle(el); return s.display !== 'none' && s.visibility !== 'hidden' && el.offsetParent !== null; })
-           .filter(el => !el.disabled && el.getAttribute('aria-disabled') !== 'true')
-           .filter(el => !el.href || el.href.startsWith(location.origin) || el.href.startsWith('#'))
-           .map(el => ({ tag: el.tagName, text: (el.textContent||'').trim().slice(0,60), id: el.id||null }));
-       });
-       console.log(JSON.stringify(elements));
-       await browser.close();
-     })();
-   "
+   playwright-cli execute <URL> --script discover-elements.js
    ```
 
-2. **Test each element** via Playwright script: screenshot before → click → wait 5s →
-   screenshot after. Compare URL/title/content before and after.
-   Identical before/after → element is dead → **3/10 max**.
+2. **Test each element** — screenshot before → click → wait → screenshot after:
+   ```bash
+   playwright-cli screenshot <URL> before.png
+   playwright-cli execute <URL> --script click-element.js --screenshot after.png
+   ```
+   Compare before/after. Identical → element is dead → **3/10 max**.
 
 3. **Judgment calls:** Always test buttons with text, nav links, form submits. Skip decorative
    elements, disabled buttons, data-entry inputs. Sample 2-3 from identical lists.

@@ -134,9 +134,9 @@ Bash: curl -sf -X POST "https://api.dkod.io/api/repos/<owner>/<repo>/changesets/
 Detect preferred tools and store flags for all subsequent agent dispatches:
 
 ```bash
-# 1. Detect Playwright (@playwright/test)
+# 1. Detect playwright-cli (standalone CLI, skills-less operation)
 HAS_PLAYWRIGHT=false
-timeout 10 npx playwright --version 2>/dev/null && HAS_PLAYWRIGHT=true
+playwright-cli --version 2>/dev/null && HAS_PLAYWRIGHT=true
 
 # 2. Detect DESIGN.md (awesome-design-md design system)
 # Check all paths the planner searches: DESIGN.md, design.md, docs/DESIGN.md, docs/design.md
@@ -152,18 +152,14 @@ HAS_DESIGN_MD=false
 ```
 
 **If `HAS_PLAYWRIGHT = false`:**
-Ask the user: `"Playwright not found. Install it for better browser testing? (yes/no) — dkod harness is autonomous, waiting 60s then continuing without it..."`
-Show a countdown: `"⏳ 60s..."`, `"⏳ 30s..."`, `"⏳ 10s..."`.
-If user responds yes/ok/go within 60s → run `npm i -D @playwright/test && npx playwright install chromium`.
-Re-verify: `timeout 10 npx playwright --version 2>/dev/null && HAS_PLAYWRIGHT=true`. Only trust the flag if the install actually worked.
-If no or no response within 60s → proceed with chrome-devtools MCP fallback.
+Output: `"Playwright CLI: ❌ not found — will use chrome-devtools MCP"`
+Output: `"💡 To enable playwright-cli: npm i -g @playwright/cli — see https://github.com/microsoft/playwright-cli"`
+Proceed with chrome-devtools MCP fallback. Do NOT ask the user or install anything.
 
 **If `HAS_DESIGN_MD = false` and the project has UI:**
-Ask the user: `"No DESIGN.md found. Browse design systems at https://github.com/VoltAgent/awesome-design-md — want to install one? (yes/no) — continuing in 60s..."`
-Show a countdown: `"⏳ 60s..."`, `"⏳ 30s..."`, `"⏳ 10s..."`.
-If user responds yes/ok/go within 60s → run `npx awesome-design-md`.
-Re-verify: check if DESIGN.md/design.md exists, only set `HAS_DESIGN_MD=true` if file was created.
-If no or no response within 60s → proceed with frontend-design skill fallback.
+Output: `"DESIGN.md: ❌ not found — will use frontend-design skill"`
+Output: `"💡 For better design: browse https://github.com/VoltAgent/awesome-design-md"`
+Proceed with frontend-design skill fallback. Do NOT ask the user or install anything.
 
 **Pass these flags to every agent dispatch:**
 - Planner: include `HAS_DESIGN_MD` in the prompt
@@ -333,16 +329,7 @@ tokens testing a broken app. Fix the build first.
 
    **If `HAS_PLAYWRIGHT = true`:**
    ```bash
-   timeout 30 node -e "
-     const { chromium } = require('playwright');
-     (async () => {
-       const browser = await chromium.launch();
-       const page = await browser.newPage();
-       await page.goto('<APP_URL>', { waitUntil: 'networkidle' });
-       await page.screenshot({ path: 'smoke-test.png' });
-       await browser.close();
-     })();
-   "
+   playwright-cli screenshot <APP_URL> smoke-test.png
    ```
    Then read `smoke-test.png` to confirm it shows real content.
 
@@ -353,20 +340,9 @@ tokens testing a broken app. Fix the build first.
 5. **Check the console** — check for fatal errors:
 
    **If `HAS_PLAYWRIGHT = true`:**
+   Write a script to check console errors, then:
    ```bash
-   timeout 30 node -e "
-     const { chromium } = require('playwright');
-     (async () => {
-       const browser = await chromium.launch();
-       const page = await browser.newPage();
-       const errors = [];
-       page.on('console', msg => { if (msg.type() === 'error') errors.push(msg.text()); });
-       await page.goto('<APP_URL>', { waitUntil: 'networkidle' });
-       await browser.close();
-       if (errors.length) { console.log('ERRORS:', JSON.stringify(errors)); process.exit(1); }
-       console.log('No fatal console errors');
-     })();
-   "
+   playwright-cli execute <APP_URL> --script console-check.js
    ```
 
    **If `HAS_PLAYWRIGHT = false`:**

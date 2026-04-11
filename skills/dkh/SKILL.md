@@ -104,16 +104,14 @@ Before starting, verify these are available:
    `dk_review`, `dk_approve`, `dk_merge`, `dk_push`, `dk_status`, `dk_watch`
 
 2. **Browser testing (pick one — Playwright preferred):**
-   - **Playwright** (preferred): Check with `timeout 10 npx playwright --version`. Uses
-     `@playwright/test` as a library via inline Node.js scripts (`node -e "..."`) for
-     navigation, screenshots, clicks, form fills, console checks, and JS evaluation.
-     Runs headless by default, needs no MCP server, produces deterministic results.
-     CLI subcommands (`npx playwright test`, `npx playwright codegen`) available for
-     structured test runs.
+   - **playwright-cli** (preferred): Check with `playwright-cli --version`. Standalone
+     CLI for skills-less browser automation — screenshots, script execution, PDF generation.
+     No Node.js scripts needed, no MCP server, runs headless by default.
+     See: https://github.com/microsoft/playwright-cli
    - **chrome-devtools MCP** (fallback): `navigate_page`, `take_screenshot`, `click`,
      `evaluate_script`, `list_console_messages`, `lighthouse_audit`. Used only if Playwright
      is not installed.
-   - If Playwright is not found, ask the user during preflight (60s timeout, continue without if no response).
+   - If not found, output install instructions and proceed with fallback. Do NOT ask the user or install.
    - If NEITHER Playwright nor chrome-devtools is available, evaluation falls to `dk_verify` + code review (no live UI testing).
 
 3. **Design system (pick one — DESIGN.md preferred):**
@@ -125,14 +123,14 @@ Before starting, verify these are available:
    - **frontend-design skill** (fallback): If no DESIGN.md exists, generators invoke
      `Skill(skill: "frontend-design")` before implementing UI components. The planner still
      generates a Design Direction section in the spec. The evaluator still scores design quality.
-     If not found, ask the user during preflight (60s timeout, continue without if no response).
+     If not found, output install instructions and proceed with fallback. Do NOT ask the user or install.
    - If NEITHER is available, generators follow the planner's Design Direction section manually.
 
 **Detection flow (run once during PRE-FLIGHT):**
 ```bash
-# 1. Detect Playwright (@playwright/test)
+# 1. Detect playwright-cli (standalone CLI, skills-less operation)
 HAS_PLAYWRIGHT=false
-timeout 10 npx playwright --version 2>/dev/null && HAS_PLAYWRIGHT=true
+playwright-cli --version 2>/dev/null && HAS_PLAYWRIGHT=true
 
 # 2. Detect DESIGN.md (check all paths the planner searches)
 HAS_DESIGN_MD=false
