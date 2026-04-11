@@ -20,15 +20,17 @@ the criteria you receive (per-unit or integration).
 The orchestrator passes `HAS_PLAYWRIGHT` in your dispatch prompt. This determines which
 browser testing approach you use:
 
-**If `HAS_PLAYWRIGHT = true` → Use Playwright CLI (preferred):**
-Playwright runs headless Chrome via CLI commands. It is more reliable, deterministic, and
-does not require an MCP server. All browser interactions in Steps 5a-5c below show both
-Playwright and chrome-devtools equivalents — use the Playwright versions.
+**If `HAS_PLAYWRIGHT = true` → Use Playwright (preferred):**
+Playwright runs headless Chrome via inline Node.js scripts (`node -e "..."`). Use
+`require('playwright')` to launch browsers, navigate, screenshot, click, fill, and
+evaluate JS. More reliable and deterministic than MCP — no browser extension needed.
+All browser interactions in Steps 5a-5c below show both Playwright and chrome-devtools
+equivalents — use the Playwright versions.
 
 **If `HAS_PLAYWRIGHT = false` → Use chrome-devtools MCP (fallback):**
 Use the chrome-devtools MCP tools as documented in the fallback sections below.
 Output once at the start of your report:
-`"💡 dkod recommends using Playwright CLI for more reliable browser testing: npm i -D playwright @playwright/test && npx playwright install chromium"`
+`"💡 dkod recommends using Playwright for more reliable browser testing: npm i -D @playwright/test && npx playwright install chromium"`
 
 **Time budget:** The orchestrator injects your time budget in the dispatch prompt (typically
 30 minutes per unit in your batch — e.g., 60 min for a 2-unit batch, 90 min for 3-unit).
@@ -79,33 +81,62 @@ Otherwise, start the dev server yourself and track `I_STARTED_SERVER = true`.
 
 **After EVERY navigation, verify loading completes.**
 
-#### If `HAS_PLAYWRIGHT = true` — Playwright CLI
+#### If `HAS_PLAYWRIGHT = true` — Playwright
 
-Use Bash commands with `timeout 30` prefix for all Playwright operations:
+Use inline Node.js scripts via Bash with `timeout 30` prefix. All scripts use
+`require('playwright')` to launch a headless browser.
 
 1. **Navigate + screenshot:**
    ```bash
-   timeout 30 npx playwright screenshot --wait-for-selector="body" <URL> screenshot-initial.png
+   timeout 30 node -e "
+     const { chromium } = require('playwright');
+     (async () => {
+       const browser = await chromium.launch();
+       const page = await browser.newPage();
+       await page.goto('<URL>', { waitUntil: 'networkidle' });
+       await page.screenshot({ path: 'screenshot-initial.png' });
+       await browser.close();
+     })();
+   "
    ```
 
 2. **Detect loading indicators:**
    ```bash
-   timeout 30 npx playwright evaluate <URL> "(() => {
-     const loadingEls = [...document.querySelectorAll('[aria-busy=\"true\"], [class*=\"spinner\"], [class*=\"loading\"], [class*=\"skeleton\"]')]
-       .filter(el => getComputedStyle(el).display !== 'none');
-     const loadingText = [...document.querySelectorAll('*')].filter(el =>
-       el.children.length === 0 && /^(loading|please wait)/i.test(el.textContent.trim()));
-     return { isLoading: loadingEls.length + loadingText.length > 0, count: loadingEls.length + loadingText.length };
-   })()"
+   timeout 30 node -e "
+     const { chromium } = require('playwright');
+     (async () => {
+       const browser = await chromium.launch();
+       const page = await browser.newPage();
+       await page.goto('<URL>', { waitUntil: 'networkidle' });
+       const result = await page.evaluate(() => {
+         const loadingEls = [...document.querySelectorAll('[aria-busy=\"true\"], [class*=\"spinner\"], [class*=\"loading\"], [class*=\"skeleton\"]')]
+           .filter(el => getComputedStyle(el).display !== 'none');
+         const loadingText = [...document.querySelectorAll('*')].filter(el =>
+           el.children.length === 0 && /^(loading|please wait)/i.test(el.textContent.trim()));
+         return { isLoading: loadingEls.length + loadingText.length > 0, count: loadingEls.length + loadingText.length };
+       });
+       console.log(JSON.stringify(result));
+       await browser.close();
+     })();
+   "
    ```
    If loading, wait 10s and recheck. Still loading → **FAIL (3/10 max)**.
 
 3. **Final screenshot** (must show real content):
    ```bash
-   timeout 30 npx playwright screenshot <URL> screenshot-final.png
+   timeout 30 node -e "
+     const { chromium } = require('playwright');
+     (async () => {
+       const browser = await chromium.launch();
+       const page = await browser.newPage();
+       await page.goto('<URL>', { waitUntil: 'networkidle' });
+       await page.screenshot({ path: 'screenshot-final.png' });
+       await browser.close();
+     })();
+   "
    ```
 
-4. **Check console errors** — run a Playwright script via Bash:
+4. **Check console errors:**
    ```bash
    timeout 30 node -e "
      const { chromium } = require('playwright');
@@ -122,12 +153,12 @@ Use Bash commands with `timeout 30` prefix for all Playwright operations:
    ```
 
 **Playwright testing patterns:**
-- **UI criteria:** screenshot → Playwright script (navigate, click, fill, assert) → screenshot
-- **API criteria:** `curl` via Bash or Playwright `page.evaluate(fetch(...))`
+- **UI criteria:** screenshot → script (navigate, click, fill, assert) → screenshot
+- **API criteria:** `curl` via Bash or `page.evaluate(() => fetch(...))`
 - **Error handling:** submit empty forms, navigate to invalid routes, send bad API requests
-- **Responsive:** `timeout 30 npx playwright screenshot --viewport-size="375,812" <URL> mobile.png`
-  then `timeout 30 npx playwright screenshot --viewport-size="1440,900" <URL> desktop.png`
-- **Interactions** — use inline Playwright scripts for click/fill/type:
+- **Responsive:** use `browser.newContext({ viewport: { width: 375, height: 812 } })` for
+  mobile, `{ width: 1440, height: 900 }` for desktop — screenshot each
+- **Interactions:**
   ```bash
   timeout 30 node -e "
     const { chromium } = require('playwright');
@@ -194,7 +225,7 @@ weakest link determines the score.
 Beyond acceptance criteria, audit ALL interactive elements on every page. A button that
 renders but does nothing on click is broken — even if no criterion mentions it.
 
-#### If `HAS_PLAYWRIGHT = true` — Playwright
+#### If `HAS_PLAYWRIGHT = true`
 
 1. **Discover elements** via Playwright script:
    ```bash

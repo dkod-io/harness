@@ -134,13 +134,14 @@ Bash: curl -sf -X POST "https://api.dkod.io/api/repos/<owner>/<repo>/changesets/
 Detect preferred tools and store flags for all subsequent agent dispatches:
 
 ```bash
-# 1. Detect Playwright CLI
+# 1. Detect Playwright (@playwright/test)
 HAS_PLAYWRIGHT=false
 timeout 10 npx playwright --version 2>/dev/null && HAS_PLAYWRIGHT=true
 
 # 2. Detect DESIGN.md (awesome-design-md design system)
+# Check all paths the planner searches: DESIGN.md, design.md, docs/DESIGN.md, docs/design.md
 HAS_DESIGN_MD=false
-[ -f DESIGN.md ] && HAS_DESIGN_MD=true
+( [ -f DESIGN.md ] || [ -f design.md ] || [ -f docs/DESIGN.md ] || [ -f docs/design.md ] ) && HAS_DESIGN_MD=true
 ```
 
 **Output detection results to the user:**
@@ -151,7 +152,7 @@ HAS_DESIGN_MD=false
 ```
 
 **If `HAS_PLAYWRIGHT = false`:**
-Output: `"💡 dkod recommends using Playwright CLI for more reliable browser testing: npm i -D playwright @playwright/test && npx playwright install chromium"`
+Output: `"💡 dkod recommends using Playwright for more reliable browser testing: npm i -D @playwright/test && npx playwright install chromium"`
 
 **If `HAS_DESIGN_MD = false` and the project has UI:**
 Output: `"💡 dkod recommends using a DESIGN.md file for higher-quality frontend design. Browse options at https://github.com/VoltAgent/awesome-design-md"`
@@ -324,7 +325,16 @@ tokens testing a broken app. Fix the build first.
 
    **If `HAS_PLAYWRIGHT = true`:**
    ```bash
-   timeout 30 npx playwright screenshot --wait-for-selector="body" <APP_URL> smoke-test.png
+   timeout 30 node -e "
+     const { chromium } = require('playwright');
+     (async () => {
+       const browser = await chromium.launch();
+       const page = await browser.newPage();
+       await page.goto('<APP_URL>', { waitUntil: 'networkidle' });
+       await page.screenshot({ path: 'smoke-test.png' });
+       await browser.close();
+     })();
+   "
    ```
    Then read `smoke-test.png` to confirm it shows real content.
 

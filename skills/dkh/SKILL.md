@@ -104,15 +104,17 @@ Before starting, verify these are available:
    `dk_review`, `dk_approve`, `dk_merge`, `dk_push`, `dk_status`, `dk_watch`
 
 2. **Browser testing (pick one — Playwright preferred):**
-   - **Playwright CLI** (preferred): Check with `timeout 10 npx playwright --version`. If
-     available, evaluators and smoke tests use Playwright CLI commands (`npx playwright
-     screenshot`, `npx playwright test`, etc.) instead of chrome-devtools MCP. Playwright
-     runs headless by default, needs no MCP server, and produces deterministic results.
+   - **Playwright** (preferred): Check with `timeout 10 npx playwright --version`. Uses
+     `@playwright/test` as a library via inline Node.js scripts (`node -e "..."`) for
+     navigation, screenshots, clicks, form fills, console checks, and JS evaluation.
+     Runs headless by default, needs no MCP server, produces deterministic results.
+     CLI subcommands (`npx playwright test`, `npx playwright codegen`) available for
+     structured test runs.
    - **chrome-devtools MCP** (fallback): `navigate_page`, `take_screenshot`, `click`,
      `evaluate_script`, `list_console_messages`, `lighthouse_audit`. Used only if Playwright
      is not installed.
    - If NEITHER is available, evaluation falls to `dk_verify` + code review (no live UI testing).
-     Output: `"⚠️ dkod recommends using Playwright CLI for browser testing: npm i -D playwright @playwright/test && npx playwright install chromium"`
+     Output: `"⚠️ dkod recommends using Playwright for browser testing: npm i -D @playwright/test && npx playwright install chromium"`
 
 3. **Design system (pick one — DESIGN.md preferred):**
    - **DESIGN.md** (preferred): A design system file in the project root, sourced from
@@ -127,14 +129,14 @@ Before starting, verify these are available:
    - If NEITHER is available, generators follow the planner's Design Direction section manually.
 
 **Detection flow (run once during PRE-FLIGHT):**
-```
-# 1. Detect Playwright
-HAS_PLAYWRIGHT = false
-timeout 10 npx playwright --version 2>/dev/null && HAS_PLAYWRIGHT = true
+```bash
+# 1. Detect Playwright (@playwright/test)
+HAS_PLAYWRIGHT=false
+timeout 10 npx playwright --version 2>/dev/null && HAS_PLAYWRIGHT=true
 
-# 2. Detect DESIGN.md
-HAS_DESIGN_MD = false
-[ -f DESIGN.md ] && HAS_DESIGN_MD = true
+# 2. Detect DESIGN.md (check all paths the planner searches)
+HAS_DESIGN_MD=false
+( [ -f DESIGN.md ] || [ -f design.md ] || [ -f docs/DESIGN.md ] || [ -f docs/design.md ] ) && HAS_DESIGN_MD=true
 
 # Pass both flags to all agent dispatches:
 # - Planner: HAS_DESIGN_MD
