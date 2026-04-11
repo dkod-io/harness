@@ -319,11 +319,10 @@ while merge_attempts < MAX_MERGE_ATTEMPTS:
       # Fix verify issues, re-submit, re-verify until clean
       # (same fix loop as Step 5b — don't skip verification)
       break  # report as conflict_unresolved if can't pass verify
-    # 5. Run at least one local review check before approving
-    #    (adapted code may introduce regressions or style violations)
+    # 5. Run at least one review check before approving
+    dk_watch(filter: "changeset.review.completed", wait: true)
     dk_review(changeset_id)
-    if local_score < 4 OR has severity:"error":
-      # Fix review findings, re-submit, re-verify
+    if deep_score < 4 OR has severity:"error":
       break  # report as conflict_unresolved if can't pass review
     dk_approve(changeset_id)
     continue   # retry dk_merge with the new submission
