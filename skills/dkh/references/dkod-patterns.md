@@ -179,16 +179,9 @@ releases locks as soon as each generator finishes, maximizing parallelism.
 - Different fields added to the same type → dkod auto-merges
 - Same import added by both agents → dkod deduplicates
 
-**MergeConflict:**
-```
-dk_resolve(resolution: "proceed")   # accept your changes
-dk_merge(changeset_id)              # retry
-```
+**MergeConflict:** Follow the recovery steps in the `dk_merge` response.
 
-**OverwriteWarning:**
-```
-dk_merge(changeset_id, force: true)  # your version is authoritative
-```
+**OverwriteWarning:** `dk_merge(changeset_id, force: true)`
 
 ### Post-Landing Verification
 

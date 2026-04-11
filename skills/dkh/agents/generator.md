@@ -283,64 +283,15 @@ After review gates pass (or max-rounds fallback allows):
 
 ```
 dk_approve(changeset_id)
-
-merge_attempts = 0
-MAX_MERGE_ATTEMPTS = 3
-
-while merge_attempts < MAX_MERGE_ATTEMPTS:
-  merge_attempts += 1
-  result = dk_merge(changeset_id, message: "<unit title>")
-
-  if result is MergeSuccess:
-    OUTPUT: "Merged — commit: {commit_hash}"
-    break   # Lock released automatically. Other blocked generators wake up.
-
-  if result is OverwriteWarning:
-    result = dk_merge(changeset_id, force: true)
-    if result is MergeSuccess:
-      OUTPUT: "Merged (force) — commit: {commit_hash}"
-      break
-
-  if result is MergeConflict:
-    # Another generator merged while you were in review — HEAD moved.
-    # Do NOT call dk_resolve blindly. Instead: re-read, re-write, re-submit.
-    OUTPUT: "Merge conflict (attempt {merge_attempts}/{MAX_MERGE_ATTEMPTS}) — re-reading and re-submitting"
-    # 1. Read the conflicting files to see what the other generator wrote
-    for each conflicting file in result.conflicts:
-      dk_file_read(file_path)
-    # 2. Re-write your files to work alongside their merged code
-    for each of your files:
-      dk_file_write(path, adapted_content)
-    # 3. Re-submit with the updated code
-    dk_submit(intent)
-    # 4. Re-verify — if verify fails, fix and re-submit (same as Step 5b)
-    verify_result = dk_verify(changeset_id)
-    if verify_result has failures:
-      # Fix verify issues, re-submit, re-verify until clean
-      # (same fix loop as Step 5b — don't skip verification)
-      break  # report as conflict_unresolved if can't pass verify
-    # 5. Run at least one review check before approving
-    dk_watch(filter: "changeset.review.completed", wait: true)
-    dk_review(changeset_id)
-    if deep_score < 4 OR has severity:"error":
-      break  # report as conflict_unresolved if can't pass review
-    dk_approve(changeset_id)
-    continue   # retry dk_merge with the new submission
-
-  # Any other error (FailedPrecondition, etc.) — do NOT call dk_resolve.
-  # dk_resolve is ONLY for changesets the platform has explicitly flagged as
-  # conflicted. If you get FailedPrecondition, the changeset is NOT in a
-  # conflicted state — calling dk_resolve will fail repeatedly.
-  OUTPUT: "Merge error (attempt {merge_attempts}): {error}"
-  if merge_attempts >= MAX_MERGE_ATTEMPTS:
-    break
-
-# If all merge attempts exhausted → report as conflict_unresolved
+result = dk_merge(changeset_id, message: "<unit title>")
 ```
 
-**NEVER call `dk_resolve` unless the platform explicitly returns a conflict state
-that requires resolution.** Most merge failures are rebase conflicts from HEAD moving —
-the fix is re-read → re-write → re-submit → re-approve → retry merge, not dk_resolve.
+- **MergeSuccess** → done. Lock released, other blocked generators wake up.
+- **OverwriteWarning** → `dk_merge(changeset_id, force: true)`
+- **MergeConflict** → follow the recovery steps in the response. Max 3 attempts,
+  then report as `conflict_unresolved`.
+
+The `dk_merge` response includes step-by-step instructions when conflicts occur.
 
 ### Step 6: Report
 
