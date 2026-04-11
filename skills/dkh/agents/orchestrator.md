@@ -154,13 +154,15 @@ HAS_DESIGN_MD=false
 **If `HAS_PLAYWRIGHT = false`:**
 Ask the user: `"Playwright not found. Install it for better browser testing? (yes/no) — dkod harness is autonomous, waiting 60s then continuing without it..."`
 Show a countdown: `"⏳ 60s..."`, `"⏳ 30s..."`, `"⏳ 10s..."`.
-If user responds yes/ok/go within 60s → run `npm i -D @playwright/test && npx playwright install chromium`, set `HAS_PLAYWRIGHT=true`.
+If user responds yes/ok/go within 60s → run `npm i -D @playwright/test && npx playwright install chromium`.
+Re-verify: `timeout 10 npx playwright --version 2>/dev/null && HAS_PLAYWRIGHT=true`. Only trust the flag if the install actually worked.
 If no or no response within 60s → proceed with chrome-devtools MCP fallback.
 
 **If `HAS_DESIGN_MD = false` and the project has UI:**
 Ask the user: `"No DESIGN.md found. Browse design systems at https://github.com/VoltAgent/awesome-design-md — want to install one? (yes/no) — continuing in 60s..."`
 Show a countdown: `"⏳ 60s..."`, `"⏳ 30s..."`, `"⏳ 10s..."`.
-If user responds yes/ok/go within 60s → run `npx awesome-design-md`, set `HAS_DESIGN_MD=true` if file was created.
+If user responds yes/ok/go within 60s → run `npx awesome-design-md`.
+Re-verify: check if DESIGN.md/design.md exists, only set `HAS_DESIGN_MD=true` if file was created.
 If no or no response within 60s → proceed with frontend-design skill fallback.
 
 **Pass these flags to every agent dispatch:**
