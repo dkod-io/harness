@@ -106,12 +106,15 @@ Use `dk_file_list` to check which files exist, then `dk_file_read` to read match
 - This is the common case for greenfield projects
 
 **If a DESIGN.md file is found (or `HAS_DESIGN_MD = true` from orchestrator):**
-- Read it — this is an awesome-design-md design system document
+- Try these paths in order: `DESIGN.md`, `design.md`, `docs/DESIGN.md`, `docs/design.md`
+- Read the first match — this is an awesome-design-md design system document
 - It becomes the **authoritative design reference** for the project
 - Use it to populate the Design Direction section (see Step 3) instead of inventing one
 - Extract: color palette, typography, spacing, component styles, tone/aesthetic
-- Note in the spec: "Design system sourced from DESIGN.md (awesome-design-md)"
-- Generators will follow DESIGN.md directly — no frontend-design skill needed
+- **CRITICAL: Note the ACTUAL resolved path in the spec** — e.g., if found at `docs/DESIGN.md`,
+  write: `"Design system sourced from docs/DESIGN.md (awesome-design-md)"`. Generators and
+  evaluators will use this exact path to read the file. Do NOT hardcode `DESIGN.md`.
+- Generators will follow the design system directly — no frontend-design skill needed
 
 **If no DESIGN.md exists:**
 - Generate the Design Direction section from scratch (current behavior)
@@ -182,14 +185,14 @@ Produce a specification that covers:
 ## Design Direction — MANDATORY for any project with UI
 
 **If DESIGN.md exists** (from awesome-design-md):
-<Summarize the key design tokens from DESIGN.md — colors, typography, spacing, component
-patterns, tone. Reference it as the authority: "See DESIGN.md for complete design system."
-Generators will read DESIGN.md directly and do NOT need the frontend-design skill.>
+<Summarize the key design tokens — colors, typography, spacing, component patterns, tone.
+Reference the actual file path as the authority. Generators will read it directly and do
+NOT need the frontend-design skill.>
 
-- **Source**: DESIGN.md (awesome-design-md)
-- **Color palette**: <extracted from DESIGN.md with hex values>
-- **Typography**: <extracted from DESIGN.md — font families and weights>
-- **Component patterns**: <key patterns from DESIGN.md — buttons, cards, forms, etc.>
+- **Source**: <actual resolved path> (awesome-design-md)   ← e.g., `docs/DESIGN.md`
+- **Color palette**: <extracted with hex values>
+- **Typography**: <extracted — font families and weights>
+- **Component patterns**: <key patterns — buttons, cards, forms, etc.>
 - **Tone/aesthetic**: <derived from the design system's overall direction>
 
 **If no DESIGN.md exists** (generate from scratch):

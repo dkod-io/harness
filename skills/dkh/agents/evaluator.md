@@ -201,10 +201,12 @@ Use inline Node.js scripts via Bash with `timeout 30` prefix. All scripts use
 
 ### Step 5b: Design Quality Audit (MANDATORY for UI)
 
-Score the implementation against the spec's **Design Direction** section. If the spec
-references a DESIGN.md source, read it with `dk_file_read("DESIGN.md")` and verify the
-implementation matches its exact tokens (colors, fonts, spacing). DESIGN.md compliance
-is stricter — the design system defines specific values, not just a direction.
+Score the implementation against the spec's **Design Direction** section. If the spec's
+Design Direction has a **Source** line referencing awesome-design-md (e.g.,
+`Source: docs/DESIGN.md (awesome-design-md)`), read that exact path with `dk_file_read`
+and verify the implementation matches its tokens. If no path is in the spec, try:
+`DESIGN.md`, `design.md`, `docs/DESIGN.md`, `docs/design.md`. Design system compliance
+is stricter — it defines specific values, not just a direction.
 
 **Check these (use Playwright scripts or `evaluate_script` depending on `HAS_PLAYWRIGHT`):**
 1. **Typography** — custom fonts loaded? Clear hierarchy? Check computed font-family

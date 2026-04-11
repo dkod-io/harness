@@ -167,13 +167,15 @@ Resolve ALL lock contention first, or report as `blocked_timeout` to the orchest
 MUST follow the design system before writing code.** This is not optional.
 
 **Option A — DESIGN.md exists (preferred):**
-If the spec's Design Direction says "Source: DESIGN.md (awesome-design-md)" or if a
-`DESIGN.md` file exists in the project root, read it with `dk_file_read("DESIGN.md")`.
+If the spec's Design Direction has a **Source** line referencing awesome-design-md (e.g.,
+`Source: docs/DESIGN.md (awesome-design-md)`), read that exact path with `dk_file_read`.
+If no path is in the spec but `HAS_DESIGN_MD = true`, try these paths in order:
+`DESIGN.md`, `design.md`, `docs/DESIGN.md`, `docs/design.md` — use the first that exists.
 This file IS your design system — follow it directly:
-- Extract color tokens, typography, spacing, component patterns from DESIGN.md
+- Extract color tokens, typography, spacing, component patterns from the design system file
 - Apply them consistently to every component you build
-- Use the exact hex values, font families, and spacing scales defined in DESIGN.md
-- Do NOT invoke the `frontend-design` skill — DESIGN.md supersedes it
+- Use the exact hex values, font families, and spacing scales defined in the file
+- Do NOT invoke the `frontend-design` skill — the design system supersedes it
 
 **Option B — No DESIGN.md (fallback to frontend-design skill):**
 If no DESIGN.md exists, invoke the `frontend-design` skill:
