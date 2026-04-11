@@ -153,7 +153,7 @@ HAS_DESIGN_MD=false
 
 **If `HAS_PLAYWRIGHT = false`:**
 Output: `"Playwright CLI: ❌ not found — will use chrome-devtools MCP"`
-Output: `"💡 To enable Playwright: npm i -D @playwright/test && npx playwright install chromium"`
+Output: `"💡 To enable playwright-cli: npm i -g @playwright/cli — see https://github.com/microsoft/playwright-cli"`
 Proceed with chrome-devtools MCP fallback. Do NOT ask the user or install anything.
 
 **If `HAS_DESIGN_MD = false` and the project has UI:**
