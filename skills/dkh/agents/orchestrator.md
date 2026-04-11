@@ -152,10 +152,14 @@ HAS_DESIGN_MD=false
 ```
 
 **If `HAS_PLAYWRIGHT = false`:**
-Output: `"💡 dkod recommends using Playwright for more reliable browser testing: npm i -D @playwright/test && npx playwright install chromium"`
+Ask the user: `"Playwright not found. Install it for better browser testing? (yes/no)"`
+Wait for response. If yes/ok/go → run `npm i -D @playwright/test && npx playwright install chromium`, set `HAS_PLAYWRIGHT=true`.
+If no → proceed with chrome-devtools MCP fallback.
 
 **If `HAS_DESIGN_MD = false` and the project has UI:**
-Output: `"💡 dkod recommends using a DESIGN.md file for higher-quality frontend design. Browse options at https://github.com/VoltAgent/awesome-design-md"`
+Ask the user: `"No DESIGN.md found. Browse design systems at https://github.com/VoltAgent/awesome-design-md — want to install one? (yes/no)"`
+Wait for response. If yes/ok/go → run `npx awesome-design-md`, set `HAS_DESIGN_MD=true` if file was created.
+If no → proceed with frontend-design skill fallback.
 
 **Pass these flags to every agent dispatch:**
 - Planner: include `HAS_DESIGN_MD` in the prompt
