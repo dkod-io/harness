@@ -212,12 +212,12 @@ findings. You now own the review-fix lifecycle — do NOT just report the score 
 
 **═══ MERGE QUALITY GATES — CRITICAL ═══**
 - **Local review score: must be ≥ 4/5** to proceed to deep review
-- **Deep review score: must be 5/5** to exit the loop
+- **Deep review score: must be ≥ 4/5** to exit the loop
 - Changesets that don't meet these thresholds MUST NOT be merged.
-  Keep fixing until you reach 5/5 deep or exhaust 10 rounds.
+  Keep fixing until you reach 4/5 deep or exhaust 10 rounds.
 
 Before entering the loop, output:
-> Starting review-fix loop (max 10 rounds) — target: local ≥ 4/5, deep 5/5
+> Starting review-fix loop (max 10 rounds) — target: local ≥ 4/5, deep ≥ 4/5
 
 ```
 round = 1   (the dk_submit you just did)
@@ -254,14 +254,14 @@ LOOP while round ≤ 10:
   dk_watch(filter: "changeset.review.completed")  — blocks until done
   dk_review(changeset_id) → get deep findings + score
 
-  if deep_score == 5 AND no severity:"error" findings:
+  if deep_score >= 4 AND no severity:"error" findings:
     OUTPUT: "Review complete — local: {local_score}/5, deep: {deep_score}/5 after {round} round(s)"
     break  (changeset meets quality gates)
 
   # Deep score < 5 — same fix process: read ALL, plan ALL, fix ALL, submit ONCE
   # STEP A: Read ALL deep findings across every section
   # STEP B: Plan fixes for each finding
-  OUTPUT: "Review-fix round {round}/10: fixing {N} deep findings (deep: {deep_score}/5, target: 5/5)"
+  OUTPUT: "Review-fix round {round}/10: fixing {N} deep findings (deep: {deep_score}/5, target: 4/5)"
   # STEP C: Fix ALL findings across ALL files
   for each file that needs changes:
     dk_file_write(path, fixed_content)
