@@ -326,6 +326,46 @@ in separate files owned by their respective units.
 Other units MUST NOT write to files containing aggregation symbols. They write their
 implementations in separate files that the aggregation symbol imports.
 
+### Step 5c: Build the File Manifest
+
+The file manifest is a **complete, structured table** mapping every symbol to its exact
+file path across ALL units. This manifest is sent to EVERY generator so they know exactly
+where to import from — no guessing.
+
+**Why this exists:** Without a shared file manifest, parallel generators must guess import
+paths for symbols owned by other units. Different generators guess differently → broken
+imports across 15+ files → expensive post-merge integration fix. The manifest eliminates
+this class of errors entirely.
+
+**Rules:**
+1. **Every symbol in every unit's OWNS and Creates lists MUST appear in the manifest.**
+2. **File paths are EXACT** — `src/stores/useTaskStore.ts`, not `src/stores/taskStore`.
+3. **Export names are EXACT** — `useTaskStore`, not `taskStore` or `useTaskStoreHook`.
+4. **Follow the stack's conventions** for file paths. If the spec says Zustand, stores go
+   in `src/stores/<storeName>.ts` with `use<Name>Store` as the default export.
+5. **The manifest is the contract.** If a generator needs to import a symbol from another
+   unit, it uses the path and name from the manifest. No alternatives.
+
+**Add this section to your plan output (after Aggregation Symbols):**
+
+```
+## File Manifest
+
+| Symbol | File | Export Name | Owner |
+|--------|------|-------------|-------|
+| App | src/App.tsx | App (default) | WU-01 |
+| router | src/router.tsx | router | WU-01 |
+| useTaskStore | src/stores/useTaskStore.ts | useTaskStore | WU-02 |
+| Task (type) | src/stores/useTaskStore.ts | Task | WU-02 |
+| useProjectStore | src/stores/useProjectStore.ts | useProjectStore | WU-03 |
+| TaskCard | src/components/TaskCard.tsx | TaskCard | WU-04 |
+| BoardPage | src/pages/BoardPage.tsx | BoardPage (default) | WU-05 |
+| ... | ... | ... | ... |
+```
+
+**Every generator receives this table.** When Unit 4 needs to import `useTaskStore`, it
+imports from `src/stores/useTaskStore.ts` — exactly as specified, no guessing.
+
 ### Step 6: Define Acceptance Criteria
 
 For each work unit, define testable criteria the evaluator will check:
@@ -382,6 +422,12 @@ Your output is a single structured artifact:
 |--------|------|-------|---------------|
 | <symbol> | <file> | <owner unit> | <what it imports/registers> |
 
+## File Manifest
+
+| Symbol | File | Export Name | Owner |
+|--------|------|-------------|-------|
+| <symbol> | <exact file path> | <exact export name> | <owner unit> |
+
 ## Dispatch
 All units dispatch simultaneously: [Unit 1, Unit 2, Unit 3, Unit 4, Unit 5, Unit 6]
 
@@ -407,6 +453,8 @@ if any check fails — save a round trip by catching it yourself:
   and clean"), hex color values, and named font choices (not Arial/Inter/Roboto)
 - [ ] **No two units own the same SYMBOL** (same file is fine — dkod AST-merges different
   symbols in the same file automatically). Check OWNS lists for duplicate symbol names.
+- [ ] **File Manifest exists** with every symbol from every unit's OWNS/Creates lists.
+  Every entry has an exact file path and exact export name. No duplicates across units.
 
 If any check fails, fix the plan before outputting it.
 

@@ -56,8 +56,14 @@ Never call `dk_connect` again — retry `dk_file_write` or `dk_submit` instead.
 ### Step 2: Understand Context
 
 The `dk_connect` response tells you whether the repo is greenfield (0 files) or has
-existing code. For greenfield repos, skip `dk_context` and `dk_file_read` — go straight
-to Step 3. For existing repos, use `dk_context` and `dk_file_read` on files you need.
+existing code.
+
+**Greenfield repos (0 files):** Skip `dk_context` and `dk_file_read` entirely — there are
+no files to read. Go straight to Step 3. Do NOT try to read files that other generators
+will create (e.g., `tsconfig.json`, store files, config files) — they don't exist yet.
+Use the **File Manifest** from the plan to know exact import paths for other units' symbols.
+
+**Existing repos:** Use `dk_context` and `dk_file_read` on files you need.
 
 ### Step 3: Implement — MAXIMUM CONCURRENCY + REAL-TIME COORDINATION
 
@@ -73,9 +79,18 @@ What matters is SYMBOLS, not files.
 
 **HOWEVER: you MUST only create/modify symbols listed in your work unit's `OWNS` and
 `Creates` fields.** If another generator owns a symbol, do NOT overwrite it. Instead:
-- Import from their path (use `dk_watch` to see what they actually created)
+- Import from the **File Manifest** — it has the exact file path and export name for
+  every symbol across all units. Use these paths verbatim. Do NOT guess or invent paths.
 - Define a local type/interface if you just need the shape
 - Add NEW symbols to a shared file — that's fine, dkod merges them
+
+**═══ FILE MANIFEST — USE IT ═══**
+The plan includes a **File Manifest** table mapping every symbol to its exact file path
+and export name. When you need to import a symbol from another unit:
+1. Look up the symbol in the File Manifest
+2. Use the exact `File` path and `Export Name` from the table
+3. Do NOT guess alternative paths or naming conventions
+This is the contract between all generators. Following it guarantees correct imports.
 
 **conflict_warnings are your real-time coordination mechanism.** Every `dk_file_write`
 response MUST be checked. If conflict_warnings are present, another generator is modifying
@@ -103,8 +118,11 @@ for each file in your work unit:
   #    (submitted changesets, review completions, etc.)
   dk_watch()
 
-  # 2. READ the file (if it exists)
-  dk_file_read(path)
+  # 2. READ the file (if it exists in the base commit)
+  #    GREENFIELD GUARD: On greenfield repos (0 files at connect time),
+  #    skip dk_file_read for files you're about to CREATE. They don't exist yet.
+  #    Only dk_file_read files that existed when you connected (existing repos).
+  dk_file_read(path)   # skip if greenfield AND file is new
 
   # 3. WRITE the file
   response = dk_file_write(path, content)
