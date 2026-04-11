@@ -169,6 +169,9 @@ Before proceeding, verify:
   together (e.g., `run()`, `App.tsx`, `mod.rs`, `index.ts`, `router.ts`) must be listed in
   the plan's Aggregation Symbols table with exactly one owner each. If missing, REJECT.
 - [ ] Design direction established for any UI work
+- [ ] **File Manifest exists.** Every symbol from every unit's OWNS/Creates lists must
+  appear in the File Manifest table with an exact file path and export name. If missing,
+  REJECT — tell the planner to add a File Manifest section.
 
 **If gate fails** → re-run planner with specific feedback, up to **3 attempts**. If Gate 1
 fails 3 times, halt with an error report explaining which checks failed and why the prompt
@@ -194,6 +197,7 @@ Agent(
           ONLY these spec sections: Stack, Design Direction, Data Model, API Surface +
           THIS generator's work unit ONLY (not other units) +
           Aggregation Symbols table (so generators know what NOT to touch) +
+          File Manifest table (so generators know EXACT import paths for all symbols) +
           "CRITICAL: Use dk_connect → dk_file_write → dk_submit ONLY.
            NEVER use Write, Edit, or Bash to create/modify source files.
            Report BOTH session_id AND changeset_id when done.">,
@@ -204,8 +208,8 @@ Agent(
 ```
 
 **Do NOT send every unit's details to every generator.** Each generator only needs:
-the tech stack, design direction, data model, its own unit, and the aggregation table.
-Other units' acceptance criteria are noise that wastes context tokens.
+the tech stack, design direction, data model, its own unit, the aggregation table,
+and the file manifest. Other units' acceptance criteria are noise that wastes context tokens.
 
 Wait for all generators to complete.
 
@@ -292,11 +296,15 @@ After dk_verify for each changeset:
    - **Deep review not yet complete** → call `dk_watch(filter: "changeset.review.completed")`
      to wait for it, then `dk_review` again
 4. **`review_round[unit_id]` >= 10** → max rounds reached, hard exit:
-   - If local ≥ 4/5 → proceed to approve with the best available changeset. Log a warning.
-   - If local < 4/5 → `dk_close(session_map[changeset_id])` to release claims, then
+   - If local ≥ 4/5 **AND** deep ≥ 3/5 → proceed to approve with the best available
+     changeset. Log a warning: "Max review rounds reached — approving with deep {score}/5".
+   - Otherwise → `dk_close(session_map[changeset_id])` to release claims, then
      skip this unit. Record it in `merge_failures` with reason "review gate exhausted:
-     local score X/5 after 10 rounds". Do NOT approve or merge. The evaluator will catch
-     the missing functionality.
+     local {X}/5, deep {Y}/5 after 10 rounds". Do NOT approve or merge. The evaluator
+     will catch the missing functionality.
+   - **NEVER approve a changeset with deep < 3/5.** A deep score of 1/5 or 2/5 indicates
+     critical issues (security vulnerabilities, logic errors). Merging such code wastes
+     more time in later phases than skipping the unit.
 
 **Re-dispatch flow (when scores don't meet gates):**
 5. **Close the old changeset** before re-dispatch: `dk_close(session_id)`
