@@ -442,7 +442,7 @@ You MUST NOT call `dk_connect`, `dk_file_write`, `dk_submit`, `dk_approve`, `dk_
 6. **If smoke test fails again after fix round**:
    - Bulk-close all non-terminal changesets (same curl as Round Transition) to release symbol claims
    - Increment `round`. If `round >= 3` → `dk_push` with "app fails to start after 3 rounds" documented
-   - Otherwise → analyze new errors, dispatch new fix sub-agents (repeat from step 1)
+   - Otherwise → analyze new errors, dispatch new fix sub-agents (repeat from step 0 to kill the dev server before the next fix round)
 
 **If smoke test PASSES** → Record the server URL. Proceed to Phase 4 (Eval).
 
