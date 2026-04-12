@@ -400,6 +400,53 @@ this class of errors entirely.
 **Every generator receives this table.** When Unit 4 needs to import `useTaskStore`, it
 imports from `src/stores/useTaskStore.ts` — exactly as specified, no guessing.
 
+### Step 5d: Build the Shared Contracts
+
+The File Manifest tells generators WHERE to import, but not WHAT the symbols look like.
+Without shared contracts, parallel generators produce mismatches like:
+- Snake_case vs camelCase field names (API returns `project_id`, UI expects `projectId`)
+- Wrong arg counts (`moveCard` called with 4 args, defined to take 3)
+- Type mismatches (types say `number`, runtime gets `string`)
+- Property name mismatches (`isLoading` vs `loading`)
+
+**Add a Shared Contracts section** defining exact shapes for every interface shared
+across units:
+
+```
+## Shared Contracts
+
+### Data Types
+| Interface | Fields | Types | Owner | Used By |
+|-----------|--------|-------|-------|---------|
+| Task | id, title, description, status, columnId, order | string, string, string, 'todo'|'in-progress'|'done', string, number | WU-02 | WU-04, WU-05, WU-06 |
+| Column | id, name, order, boardId | string, string, number, string | WU-02 | WU-04, WU-05 |
+| Project | id, name, createdAt, updatedAt | string, string, string (ISO), string (ISO) | WU-02 | WU-01, WU-03 |
+
+### Store Functions
+| Function | Signature | Owner | Used By |
+|----------|-----------|-------|---------|
+| useTaskStore().createTask | (task: Omit<Task, 'id'>) => Promise<Task> | WU-02 | WU-04, WU-06 |
+| useTaskStore().moveCard | (taskId: string, toColumnId: string, toOrder: number) => Promise<void> | WU-02 | WU-05 |
+
+### API Response Shapes
+| Endpoint | Response | Owner |
+|----------|----------|-------|
+| GET /api/tasks | { tasks: Task[] } | WU-02 |
+| POST /api/tasks | { task: Task } | WU-02 |
+```
+
+**Rules:**
+1. **Exact field names** — if the API returns `project_id` (snake_case), document it;
+   or require camelCase transformation in the API layer
+2. **Exact types** — no hand-waving. `string` not "identifier". `Date` vs `string (ISO)` matters.
+3. **Function signatures** — arg count, arg types, return type — all explicit
+4. **Property name consistency** — decide `isLoading` OR `loading`, then use it everywhere
+
+**Naming convention rule:** Pick ONE convention in the Shared Contracts and enforce it:
+- DB fields: snake_case (common SQL convention)
+- TypeScript: camelCase
+- If using both, document where conversion happens (typically in the API layer)
+
 ### Step 6: Define Acceptance Criteria
 
 For each work unit, define testable criteria the evaluator will check:
@@ -514,3 +561,11 @@ session and prevents it from appearing as an orphaned draft changeset.
    that opens the TaskForm modal" is useful.
 6. **Don't over-specify implementation.** Define WHAT to build and WHERE (which symbols/files),
    not HOW. Generators are smart — let them make implementation choices.
+7. **Stack-specific rules:**
+   - **If using Bun**: always specify `bun:sqlite` for SQLite. NEVER `better-sqlite3` or
+     `sqlite3` — they require native compilation and fail on many systems. `bun:sqlite`
+     is built into Bun with no native deps.
+   - **If using Node**: `better-sqlite3` is fine (native compiles usually work in Node).
+8. **Shared Contracts section is MANDATORY** when units share data or function signatures.
+   Without it, generators produce snake_case vs camelCase mismatches, wrong arg counts,
+   and property name typos that only surface during integration.
