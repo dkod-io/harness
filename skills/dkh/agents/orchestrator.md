@@ -405,6 +405,9 @@ You MUST NOT call `dk_connect`, `dk_file_write`, `dk_submit`, `dk_approve`, `dk_
 
 **Fix-Integration Flow (parallel, symbol-owned):**
 
+0. **Kill the dev server** to free the port and release file handles:
+   `kill <PID>` or `pkill -f "bun run dev"`
+
 1. **Analyze failures** — categorize errors by affected file/symbol:
    - Import path errors → which files have broken imports
    - Type mismatches → which types are incompatible
@@ -437,6 +440,7 @@ You MUST NOT call `dk_connect`, `dk_file_write`, `dk_submit`, `dk_approve`, `dk_
 5. **Re-run FILE SYNC + smoke test** with the fixed code
 
 6. **If smoke test fails again after fix round**:
+   - Bulk-close all non-terminal changesets (same curl as Round Transition) to release symbol claims
    - Increment `round`. If `round >= 3` → `dk_push` with "app fails to start after 3 rounds" documented
    - Otherwise → analyze new errors, dispatch new fix sub-agents (repeat from step 1)
 
