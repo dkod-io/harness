@@ -418,7 +418,7 @@ across units:
 ### Data Types
 | Interface | Fields | Types | Owner | Used By |
 |-----------|--------|-------|-------|---------|
-| Task | id, title, description, status, columnId, order | string, string, string, 'todo'|'in-progress'|'done', string, number | WU-02 | WU-04, WU-05, WU-06 |
+| Task | id, title, description, status, columnId, order | string, string, string, 'todo' \| 'in-progress' \| 'done', string, number | WU-02 | WU-04, WU-05, WU-06 |
 | Column | id, name, order, boardId | string, string, number, string | WU-02 | WU-04, WU-05 |
 | Project | id, name, createdAt, updatedAt | string, string, string (ISO), string (ISO) | WU-02 | WU-01, WU-03 |
 

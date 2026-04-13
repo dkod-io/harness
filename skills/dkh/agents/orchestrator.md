@@ -260,7 +260,7 @@ Agent(
   model: <generator model from active profile>,
   effort: <generator effort from active profile>,
   prompt: <inject generator.md instructions +
-          ONLY these spec sections: Stack, Design Direction, Data Model, API Surface +
+          ONLY these spec sections: Stack, Design Direction, Data Model, API Surface, Shared Contracts +
           THIS generator's work unit ONLY (not other units) +
           Aggregation Symbols table (so generators know what NOT to touch) +
           File Manifest table (so generators know EXACT import paths for all symbols) +
@@ -425,6 +425,7 @@ You MUST NOT call `dk_connect`, `dk_file_write`, `dk_submit`, `dk_approve`, `dk_
        subagent_type: "general-purpose",
        model: <generator model from active profile>,
        prompt: <generator.md instructions +
+               Stack, Shared Contracts, File Manifest (so fixes respect the contracts) +
                "FIX INTEGRATION: <error summary>" +
                "Files to fix: <specific files>" +
                "Symbols you own: <symbols>" +
