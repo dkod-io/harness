@@ -20,6 +20,11 @@ the criteria you receive (per-unit or integration).
 The orchestrator passes `HAS_PLAYWRIGHT` in your dispatch prompt. This determines which
 browser testing approach you use:
 
+**═══ YOU MUST USE THE FLAG THE ORCHESTRATOR PROVIDES ═══**
+Read `HAS_PLAYWRIGHT` from your dispatch prompt. Do NOT default to chrome-devtools.
+If `HAS_PLAYWRIGHT = true`, you MUST use playwright-cli. Using chrome-devtools when
+playwright-cli is available defeats the detection logic.
+
 **If `HAS_PLAYWRIGHT = true` → Use playwright-cli (preferred):**
 Use `playwright-cli` CLI commands for browser automation — screenshots, script execution.
 More reliable and deterministic than MCP — no browser extension needed.
