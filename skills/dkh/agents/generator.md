@@ -227,13 +227,17 @@ If verify fails, fix the issues and re-submit (counts as a round).
 **5c. Review-Fix Loop (max 10 rounds)**
 
 **═══ MERGE QUALITY GATES — CRITICAL ═══**
-- **Local review score: must be ≥ 4/5** to proceed to deep review
-- **Deep review score: must be ≥ 4/5** to exit the loop
+- **Local review score: must be ≥ 4/5** (always enforced)
+- **Deep review score: must be ≥ 4/5** (only when deep review is enabled for the repo)
 - Changesets that don't meet these thresholds MUST NOT be merged.
-  Keep fixing until you reach 4/5 deep or exhaust 10 rounds.
+
+**═══ DEEP REVIEW MAY BE DISABLED ═══**
+Deep review requires the repo to have an Anthropic/OpenRouter API key configured.
+If disabled, `dk_review` returns no deep findings (deep_score is null/absent). In that
+case, skip the deep review gate entirely — local review is the only gate.
 
 Before entering the loop, output:
-> Starting review-fix loop (max 10 rounds) — target: local ≥ 4/5, deep ≥ 4/5
+> Starting review-fix loop (max 10 rounds) — target: local ≥ 4/5, deep ≥ 4/5 (if enabled)
 
 ```
 round = 1   (the dk_submit you just did)
@@ -252,9 +256,17 @@ LOOP while round ≤ 10:
     continue
 
   # ═══ LOCAL IS CLEAN (≥ 4/5) — CHECK DEEP REVIEW ═══
-  dk_watch(filter: "changeset.review.completed", wait: true)
-  dk_review(changeset_id) → get deep findings + score
+  # MUST wait for deep review BEFORE proceeding. Don't skip this.
+  # If deep review is disabled on the repo, dk_watch returns quickly or
+  # dk_review returns no deep findings — treat as "deep review disabled".
+  dk_watch(filter: "changeset.review.completed", wait: true, timeout_ms: 300000)
+  review_result = dk_review(changeset_id)
 
+  if review_result has no deep review (disabled):
+    OUTPUT: "Deep review disabled — local review: {local_score}/5 is the only gate. Proceeding after {round} round(s)."
+    break  (proceed to approve + merge — local-only gate)
+
+  # Deep review exists — enforce the gate
   if deep_score >= 4 AND no severity:"error" findings:
     OUTPUT: "Review complete — local: {local_score}/5, deep: {deep_score}/5 after {round} round(s)"
     break  (proceed to approve + merge)
@@ -271,8 +283,10 @@ LOOP while round ≤ 10:
 ```
 
 **Max-rounds fallback:** If 10 rounds exhausted:
-- If local ≥ 4/5 AND deep ≥ 3/5 → proceed to approve + merge with warning
-- Otherwise → report as `review_failed`, do NOT merge
+- If deep review disabled: if local ≥ 4/5 → proceed to approve + merge. Otherwise → `review_failed`.
+- If deep review enabled: if local ≥ 4/5 AND deep ≥ 3/5 → proceed to approve + merge with warning. Otherwise → `review_failed`.
+
+**CRITICAL — do NOT skip the deep review wait.** The previous build observed changesets merging with deep 2/5 because generators called dk_approve/dk_merge immediately after dk_submit without waiting for the async deep review. ALWAYS call `dk_watch(wait: true)` before `dk_review`, and ALWAYS enforce the deep gate when a deep score exists.
 
 **CRITICAL: Fix ALL findings before submitting.** Each submit costs a round. Read all
 findings → plan all fixes → apply all fixes → submit once.
