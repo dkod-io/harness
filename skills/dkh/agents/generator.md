@@ -227,16 +227,22 @@ If verify fails, fix the issues and re-submit (counts as a round).
 **5c. Review-Fix Loop (max 10 rounds)**
 
 **═══ MERGE QUALITY GATES — CRITICAL ═══**
-- **Local review score: must be ≥ 4/5** to proceed to deep review
-- **Deep review score: must be ≥ 4/5** to exit the loop
+- **Local review score: must be ≥ 4/5** (always enforced)
+- **Deep review score: must be ≥ 4/5** (only when deep review is enabled for the repo)
 - Changesets that don't meet these thresholds MUST NOT be merged.
-  Keep fixing until you reach 4/5 deep or exhaust 10 rounds.
+
+**═══ DEEP REVIEW MAY BE DISABLED ═══**
+Deep review requires the repo to have an Anthropic/OpenRouter API key configured.
+If disabled, `dk_review` returns no deep findings (deep_score is null/absent). In that
+case, skip the deep review gate entirely — local review is the only gate.
 
 Before entering the loop, output:
-> Starting review-fix loop (max 10 rounds) — target: local ≥ 4/5, deep ≥ 4/5
+> Starting review-fix loop (max 10 rounds) — target: local ≥ 4/5, deep ≥ 4/5 (if enabled)
 
 ```
-round = 1   (the dk_submit you just did)
+round = 1                    # the dk_submit you just did
+deep_review_disabled = false # set to true if the disabled branch is taken
+deep_score = null            # set from review_result when deep review is present
 
 LOOP while round ≤ 10:
 
@@ -251,10 +257,38 @@ LOOP while round ≤ 10:
     dk_submit again
     continue
 
-  # ═══ LOCAL IS CLEAN (≥ 4/5) — CHECK DEEP REVIEW ═══
-  dk_watch(filter: "changeset.review.completed", wait: true)
-  dk_review(changeset_id) → get deep findings + score
+  # ═══ LOCAL IS CLEAN (≥ 4/5) — WAIT FOR DEEP REVIEW ═══
+  # MUST wait for deep review BEFORE proceeding. Don't skip this.
+  watch_result = dk_watch(filter: "changeset.review.completed", wait: true, timeout_ms: 300000)
 
+  if watch_result.timed_out:
+    OUTPUT: "WARNING: Deep review timed out after 5 min — cannot enforce deep gate this round. Fixing and resubmitting to retry."
+    round += 1
+    if round > 10 → break
+    dk_submit(intent)
+    continue
+
+  review_result = dk_review(changeset_id)
+
+  if review_result has no deep review:
+    if deep_score is not null (seen in a prior round):
+      # Deep review WAS working — treat as transient error, retry
+      OUTPUT: "WARNING: Deep review returned no score this round (transient?). Retrying."
+      round += 1
+      if round > 10 → break
+      dk_submit(intent)
+      continue
+    else:
+      # Never seen a deep score — treat as disabled for this repo
+      deep_review_disabled = true
+      OUTPUT: "Deep review disabled — local: {local_score}/5 is the only gate. Proceeding after {round} round(s)."
+      break  (proceed to approve + merge — local-only gate)
+
+  # Deep review present — record the score (persists across rounds so the
+  # transient-vs-disabled check above works on any future missing-deep round)
+  deep_score = review_result.deep_score
+
+  # Deep review exists — enforce the gate
   if deep_score >= 4 AND no severity:"error" findings:
     OUTPUT: "Review complete — local: {local_score}/5, deep: {deep_score}/5 after {round} round(s)"
     break  (proceed to approve + merge)
@@ -271,8 +305,10 @@ LOOP while round ≤ 10:
 ```
 
 **Max-rounds fallback:** If 10 rounds exhausted:
-- If local ≥ 4/5 AND deep ≥ 3/5 → proceed to approve + merge with warning
-- Otherwise → report as `review_failed`, do NOT merge
+- If `deep_review_disabled`: if local ≥ 4/5 → proceed to approve + merge. Otherwise → `review_failed`.
+- Otherwise (deep review enabled): if local ≥ 4/5 AND deep ≥ 3/5 → proceed to approve + merge with warning. Otherwise → `review_failed`.
+
+**CRITICAL — do NOT skip the deep review wait.** The previous build observed changesets merging with deep 2/5 because generators called dk_approve/dk_merge immediately after dk_submit without waiting for the async deep review. ALWAYS call `dk_watch(wait: true)` before `dk_review`, and ALWAYS enforce the deep gate when a deep score exists.
 
 **CRITICAL: Fix ALL findings before submitting.** Each submit costs a round. Read all
 findings → plan all fixes → apply all fixes → submit once.
