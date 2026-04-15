@@ -269,10 +269,19 @@ LOOP while round ≤ 10:
 
   review_result = dk_review(changeset_id)
 
-  if review_result has no deep review (disabled):
-    deep_review_disabled = true
-    OUTPUT: "Deep review disabled — local: {local_score}/5 is the only gate. Proceeding after {round} round(s)."
-    break  (proceed to approve + merge — local-only gate)
+  if review_result has no deep review:
+    if deep_score is not null (seen in a prior round):
+      # Deep review WAS working — treat as transient error, retry
+      OUTPUT: "WARNING: Deep review returned no score this round (transient?). Retrying."
+      round += 1
+      if round > 10 → break
+      dk_submit(intent)
+      continue
+    else:
+      # Never seen a deep score — treat as disabled for this repo
+      deep_review_disabled = true
+      OUTPUT: "Deep review disabled — local: {local_score}/5 is the only gate. Proceeding after {round} round(s)."
+      break  (proceed to approve + merge — local-only gate)
 
   # Deep review exists — enforce the gate
   if deep_score >= 4 AND no severity:"error" findings:
