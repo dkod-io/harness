@@ -284,6 +284,10 @@ LOOP while round ≤ 10:
       OUTPUT: "Deep review disabled — local: {local_score}/5 is the only gate. Proceeding after {round} round(s)."
       break  (proceed to approve + merge — local-only gate)
 
+  # Deep review present — record the score (persists across rounds so the
+  # transient-vs-disabled check above works on any future missing-deep round)
+  deep_score = review_result.deep_score
+
   # Deep review exists — enforce the gate
   if deep_score >= 4 AND no severity:"error" findings:
     OUTPUT: "Review complete — local: {local_score}/5, deep: {deep_score}/5 after {round} round(s)"
