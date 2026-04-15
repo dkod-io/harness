@@ -1,6 +1,6 @@
 ---
 name: dkh
-version: 0.1.47
+version: 0.1.48
 description: >
   Autonomous harness for building complete applications from a single prompt. Uses dkod for
   parallel agent execution with AST-level semantic merging. Orchestrates a Planner that decomposes
