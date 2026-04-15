@@ -242,6 +242,7 @@ Before entering the loop, output:
 ```
 round = 1                    # the dk_submit you just did
 deep_review_disabled = false # set to true if the disabled branch is taken
+deep_score = null            # set from review_result when deep review is present
 
 LOOP while round ≤ 10:
 
