@@ -104,9 +104,10 @@ response MUST be checked for two conditions:
 1. **SYMBOL_LOCKED** — Another generator holds the lock on a symbol you're trying to write.
    Your write DID NOT happen. You must wait and retry:
    ```
-   dk_watch(filter: "symbol.lock.released", wait: true)   ← blocks until lock releases (they merged)
-   dk_file_read(path)                                      ← read the file with their merged code
-   dk_file_write(path, adapted_content)                    ← write your symbols alongside theirs
+   dk_watch(filter: "symbol.lock.released", wait: true, timeout_ms: 60000)
+       ← blocks until lock releases; other agent's next dk_submit releases it
+   dk_file_read(path)                                      ← read the file with their submitted code
+   dk_file_write(path, adapted_content)                    ← write your symbols on top of theirs
    ```
 
 2. **conflict_warnings** (legacy) — Informational warning that another generator is active
@@ -116,11 +117,16 @@ response MUST be checked for two conditions:
 - **Different symbols in same file**: No lock contention. Both agents proceed freely.
   dkod auto-merges at the AST level. This is the normal, expected case.
 - **Same symbol**: `dk_file_write` returns `SYMBOL_LOCKED`. Your write is rejected.
-  Wait for `symbol.lock.released` event, re-read, then write alongside their code.
+  Wait for `symbol.lock.released` event, re-read, then write your symbols on top.
 
-**Lock lifecycle:** Locks are acquired on `dk_file_write` and released on `dk_merge`,
-`dk_close`, or session timeout. Once the other generator merges, the lock releases and
-you can read their merged code via `dk_file_read`.
+**Lock lifecycle:** Locks are acquired on `dk_file_write` and released on the next
+`dk_submit` by the holder — i.e., the hold window is typically seconds, not minutes.
+Locks are also released on `dk_close` and session timeout. Once the other generator
+submits, the lock releases and you can read their code via `dk_file_read` — your
+session will see their submitted-but-not-yet-merged overlay on top of the base.
+
+You are effectively **stacking** your changeset on top of theirs. The merge-order
+engine takes care of linearization: parents merge before children.
 
 **The implementation loop:**
 
@@ -141,11 +147,12 @@ for each file in your work unit:
 
   # 4. ═══ HARD GATE: CHECK RESPONSE ═══
   if response.status == "locked":
-    # SYMBOL_LOCKED — another generator holds this symbol
-    # Wait for their lock to release (they will merge), then retry
-    dk_watch(filter: "symbol.lock.released", wait: true)   # blocks until lock releases
-    dk_file_read(path)                                      # read their merged code
-    response = dk_file_write(path, adapted_content)         # write alongside theirs
+    # SYMBOL_LOCKED — another generator holds this symbol.
+    # Wait for their lock to release (they will dk_submit), then retry.
+    # Wait window is short — their dk_submit releases the lock in seconds.
+    dk_watch(filter: "symbol.lock.released", wait: true, timeout_ms: 60000)
+    dk_file_read(path)                                      # read their submitted code
+    response = dk_file_write(path, adapted_content)         # write on top of theirs
     # If still locked after 3 retries → report as blocked_timeout
 
   if response contains conflict_warnings:
@@ -225,6 +232,18 @@ Call `dk_verify(changeset_id)` — runs lint, type-check, test, semantic analysi
 If verify fails, fix the issues and re-submit (counts as a round).
 
 **5c. Review-Fix Loop (max 10 rounds)**
+
+**═══ REVIEW-FIX = NEW STACKED CHANGESET, NOT AN AMENDMENT ═══**
+Each `dk_submit` in this loop creates a **new** changeset that stacks on top of your
+previous one. You are NOT modifying the prior submission; it's durable. Before
+writing each fix round, you MUST `dk_file_read(path)` first — the file you see
+now may include:
+  - your own prior submitted changes (visible as base of your session)
+  - other generators' changes that landed between rounds (they stack too)
+
+If `dk_file_write` returns `SYMBOL_LOCKED` inside the review-fix loop, another
+generator has claimed a symbol you need to touch. Wait and adapt exactly like
+Step 3 — the lock resolves in seconds once they submit.
 
 **═══ MERGE QUALITY GATES — CRITICAL ═══**
 - **Local review score: must be ≥ 4/5** (always enforced)
@@ -322,10 +341,19 @@ dk_approve(changeset_id)
 result = dk_merge(changeset_id, message: "<unit title>")
 ```
 
-- **MergeSuccess** → done. Lock released, other blocked generators wake up.
+- **MergeSuccess** → done. Any locks you still hold are released; other generators
+  stacked on top of your merged changeset can now merge.
 - **OverwriteWarning** → `dk_merge(changeset_id, force: true)`
 - **MergeConflict** → follow the recovery steps in the response. Max 3 attempts,
   then report as `conflict_unresolved`.
+- **MERGE_BLOCKED** → your changeset is stacked on another changeset that hasn't
+  merged yet. Wait for the parent, then retry:
+  ```
+  dk_watch(filter: "changeset.merged", wait: true, timeout_ms: 180000)
+  dk_merge(changeset_id)   # retry
+  ```
+  If you also receive `changeset.parent_rollback_invalidated`, your parent failed
+  merge. Close + report the unit for re-planning (don't retry blindly).
 
 The `dk_merge` response includes step-by-step instructions when conflicts occur.
 
