@@ -20,6 +20,7 @@ ever, for any reason. The following tools are FORBIDDEN for writing code:
 - `dk_file_read` — only sub-agents read code (you don't need to read code to coordinate)
 - `dk_submit` — only sub-agents submit changesets
 - `dk_approve` — only sub-agents approve their own changesets
+  (EXCEPTION: `dk_approve(force: true, override_reason: …)` is orchestrator-only, and ONLY in the LAND-phase review-gate cap path described below — never anywhere else)
 - `dk_merge` — only sub-agents merge their own changesets
 - `dk_resolve` — only sub-agents resolve their own conflicts
 - `Write`, `Edit`, `NotebookEdit` — no local file writes
@@ -32,7 +33,8 @@ ever, for any reason. The following tools are FORBIDDEN for writing code:
   own sessions for their work.
 - `dk_close` — close the preflight session after verification
 - `dk_push` — ONLY the orchestrator pushes to GitHub, and only at Phase 5
-- `dk_status`, `dk_watch` — read-only dkod status
+- `dk_status`, `dk_watch`, `dk_review` — read-only dkod status/review
+  (`dk_review` is read-only and does NOT require an open session — it is invoked in the LAND-phase review gate)
 - `Bash` for: `bun install`, `bun run dev`, `git` read-only commands, `curl` to dkod APIs,
   process management (`kill`, `ps`)
 
@@ -686,11 +688,11 @@ The sync branch (`dkh/sync-<repo>`) is overwritten on each push — no need to d
 Between `dk_verify` and `dk_approve`:
 
 1. Call `dk_review` for the changeset; require a `tier: "deep"` result with `score >= DKOD_REVIEW_MIN_SCORE`.
-2. If no deep tier → `dk_watch` for `changeset.review.completed`, timeout 180s. On timeout, fall through; `dk_approve` rejects cleanly and you re-enter this step.
+2. If no deep tier → `dk_watch` for `changeset.review.completed`, timeout 180s. On timeout, fall through; `dk_approve` rejects cleanly and you re-enter this step. **Cap this watch-retry at 3 attempts per changeset.** On the 4th attempt (i.e. after 3 consecutive 180s timeouts with no `tier: "deep"` result delivered) the deep-review service is degraded — **proceed as if `code_review: disabled` for this single changeset**: log `code_review: degraded (deep-review service unreachable, proceeding with legacy threshold 3)` and hand off to `dk_approve` under the legacy rules. This bound is separate from the fix-round cap in step 4.
 3. If `score < min_score` → dispatch a fix-agent (generator template) with the findings as the prompt. Fix agent writes → submits → MCP fires a new deep review. Wait and re-check.
-4. Cap at 3 fix rounds per changeset. On exceed:
-   - Either **force-approve** with `override_reason: "Exceeded 3 review fix rounds; findings: <short list>"`
-   - Or fail the unit and document in the eval report.
+4. Cap at 3 fix rounds per changeset. On exceed, **the default is force-approve**:
+   - Call `dk_approve(force: true, override_reason: "Exceeded 3 review fix rounds; findings: <short list>")` — the `override_reason` MUST be ≥20 characters (the engine enforces this).
+   - **Failing the unit is a human-override path only** — not an autonomous default. Do not choose it on your own. It applies only when the user/operator has explicitly overridden the default (e.g. via an environment flag or a prompt instruction) for this build.
 
 Fix-agent dispatch uses the same `generator.md instructions` template generators already use for fix integration (see SMOKE TEST Fix-Integration Flow above). Inject the deep-review findings into the prompt under `"FIX REVIEW FINDINGS: <findings>"` plus the specific changeset/files and the symbols the fix-agent owns, so the fix round runs in parallel-safe isolation.
 
