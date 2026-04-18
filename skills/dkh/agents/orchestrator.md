@@ -322,18 +322,27 @@ line keeps the log readable.
   Record in `merge_failures`.
   Output on its own line: `[unit-name] CONFLICT_UNRESOLVED. Progress: N/M done.`
 
+- **Status: empty_changeset** → the generator detected there is nothing to submit
+  (the work unit's files are already present at the current base — typically landed
+  by another unit's merge or a prior salvage). Record in `merged_units` as a no-op
+  success and do NOT re-dispatch — re-dispatching would loop on the same empty state.
+  Output on its own line: `[unit-name] EMPTY_CHANGESET — already implemented at base. Progress: N/M done.`
+
 - **No report / crashed** → record as failure.
 
 **═══ GATE 2 CHECK ═══**
 Before proceeding, verify:
 - [ ] Every generator has reported back
-- [ ] Count `merged` vs `blocked_timeout` / `review_failed` / `conflict_unresolved`
-- [ ] At least one generator merged successfully
+- [ ] Count `merged` + `empty_changeset` (both count as done) vs `blocked_timeout` / `review_failed` / `conflict_unresolved`
+- [ ] At least one generator merged successfully (or all remaining units are `empty_changeset`)
 
 **If any generators are blocked_timeout or conflict_unresolved:**
 - Increment `unit_attempts[unit_id]`
 - If `unit_attempts[unit_id] >= 3` → move to `blocked_units`, remove from `active_units`
 - Otherwise → re-dispatch
+
+**`empty_changeset` is NOT retried** — the work unit is already satisfied at the
+current base. Treat it as done.
 
 **If any generators crashed** (no report at all):
 - Re-dispatch. Do NOT proceed until all have reported.
