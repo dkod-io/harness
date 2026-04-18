@@ -216,6 +216,20 @@ Before calling `dk_submit`, verify:
 1. **No unresolved conflict_warnings** — if any remain, go back to Step 3
 2. **`dk_watch()` final check** — verify your imports still match what other generators created
 3. **Self-review** — all acceptance criteria addressed, exports match spec
+4. **Changeset is NOT empty** — confirm you called `dk_file_write` at least once this
+   round AND at least one write succeeded. If you made zero successful writes:
+   - **DO NOT call `dk_submit`.** An empty changeset creates a deadlocked record on
+     the platform that can only be closed manually.
+   - **Diagnose why you have nothing to write.** Common causes:
+     - Work unit is already implemented by another generator's earlier merge (dkod's
+       AST overlay means files may already contain your target symbols at the current base).
+     - You're in a retry round and a prior attempt's work landed via salvage.
+     - You read files expecting to modify them and everything was already correct.
+   - **Report back immediately** with:
+     `Status: empty_changeset — work unit appears already implemented at base [sha7].
+     Rejecting empty submit.`
+     The orchestrator will treat this as a soft success (no work needed) and will NOT
+     re-dispatch. Do not call `dk_close` — session cleanup is the orchestrator's job.
 
 ### Step 5: Submit, Review, and Merge — FULL PIPELINE
 
