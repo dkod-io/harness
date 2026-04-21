@@ -114,6 +114,8 @@ eval_reports: []            # Set after Phase 3 — MUST EXIST before dk_push
 unit_attempts: {}           # { "unit-id": attempt_count } — incremented each re-dispatch
 blocked_units: []           # Units that exceeded MAX_UNIT_ATTEMPTS (3) — not retried
 replan_count: 0             # Number of REPLANs executed this build (max 1)
+platform_halt: false        # Circuit-breaker — flips true on first merge_failed_platform report
+halt_manifest_path: null    # Path to the halt manifest once written (set when platform_halt is tripped)
 ```
 
 ---
@@ -322,6 +324,16 @@ line keeps the log readable.
   Record in `merge_failures`.
   Output on its own line: `[unit-name] CONFLICT_UNRESOLVED. Progress: N/M done.`
 
+- **Status: merge_failed_platform** → the generator was reviewed and approved,
+  but `dk_merge` failed with a platform-side error (DB error, 5xx, session evicted
+  mid-merge, malformed response). The changeset is in `approved` state and the
+  generator has KEPT its session open to preserve symbol claims. This is **NOT**
+  retryable and **NOT** a conflict. Record in `merge_failures` with the
+  changeset_id, review scores, and error class/message. **Set `platform_halt = true`**
+  — this short-circuits the remaining Gate 2 logic. Do NOT increment `unit_attempts`;
+  the unit's work is complete, only the merge call failed.
+  Output on its own line: `[unit-name] MERGE_FAILED_PLATFORM — changeset [id] approved (local {X}/5, deep {Y}/5). Platform halt engaged.`
+
 - **Status: empty_changeset** → the generator detected there is nothing to submit
   (the work unit's files are already present at the current base — typically landed
   by another unit's merge or a prior salvage). Record in `merged_units` as a no-op
@@ -333,8 +345,35 @@ line keeps the log readable.
 **═══ GATE 2 CHECK ═══**
 Before proceeding, verify:
 - [ ] Every generator has reported back
-- [ ] Count `merged` + `empty_changeset` (both count as done) vs `blocked_timeout` / `review_failed` / `conflict_unresolved`
+- [ ] **Platform halt check:** if `platform_halt == true` (any generator reported
+  `merge_failed_platform`), STOP. Write the halt manifest (see **HALT MANIFEST**
+  section below), output the halt message, and exit the run. **Skip every other
+  Gate 2 branch** — no retries, no bulk-close, no re-dispatch.
+- [ ] Count `merged` + `empty_changeset` (both count as done) vs `blocked_timeout` / `review_failed` / `conflict_unresolved` / `merge_failed_platform`
 - [ ] At least one generator merged successfully (or all remaining units are `empty_changeset`)
+
+**═══ PLATFORM HALT (circuit-breaker) ═══**
+
+If `platform_halt == true`:
+
+1. **Do NOT bulk-close.** The approved changesets in `merge_failures` represent real,
+   reviewed work. Bulk-close would destroy them. Other generators still in-flight
+   that reach `dk_merge` against the broken platform will also report
+   `merge_failed_platform` — collect their reports but do not retry any of them.
+2. **Write the halt manifest** (see below). Set `halt_manifest_path` on the state.
+3. **Output** (each line standalone):
+   ```
+   🛑 Harness halted — platform merge failure detected.
+   Halt manifest: <halt_manifest_path>
+   Approved changesets preserved: <N>
+   Do NOT /dkh continue until the platform is recovered.
+   ```
+4. **Exit the run.** Do not proceed to FILE SYNC / SMOKE TEST / EVAL / SHIP.
+
+**`platform_halt` is a one-way gate.** Once set, the orchestrator cannot clear it
+in the same run — a fresh `/dkh` invocation (after platform recovery) is required.
+
+**If `platform_halt == false`:**
 
 **If any generators are blocked_timeout or conflict_unresolved:**
 - Increment `unit_attempts[unit_id]`
@@ -359,6 +398,72 @@ Bash: curl -sf -X POST "https://api.dkod.io/api/repos/<owner>/<repo>/changesets/
 > **Gate 2 PASSED** — `merged_units: [N]`, `merge_failures: [list or empty]`. Proceeding to FILE SYNC.
 
 ⚠️ **DO NOT dk_push after build. Shipping is Phase 4 only.**
+
+---
+
+### HALT MANIFEST — Platform Failure Recovery
+
+When `platform_halt == true`, the orchestrator writes a structured manifest that
+captures every approved changeset and its provenance so a platform operator can
+complete the merges manually (or resume via `/dkh continue` after platform recovery).
+
+**Path:** `docs/harness/runs/halt-<ISO-timestamp>.md` (e.g., `halt-2026-04-21T14-32-00Z.md`).
+If the `docs/harness/runs/` directory does not exist, create it via a sub-agent
+dispatch (orchestrator never writes files directly). In practice, dispatch a single
+general-purpose agent with a tight prompt: "Write the following manifest content to
+`<path>` using the `Write` tool. Do not touch anything else."
+
+**Required fields:**
+
+```markdown
+# Harness Halt Manifest
+
+- **Timestamp (UTC):** <ISO-8601>
+- **Repo:** <owner/repo>
+- **Harness version:** <SKILL.md version>
+- **Run ID / session context:** <short identifier>
+- **Halt reason:** platform merge failure (`merge_failed_platform` reported by ≥1 generator)
+
+## Approved changesets (preserve — DO NOT bulk-close)
+
+| Unit | Changeset ID | State | Local score | Deep score | Session ID (still open) | Error class | Error message |
+|------|-------------|-------|------------|-----------|-------------------------|-------------|---------------|
+| WU-01 … | … | approved | 5/5 | 4/5 | <session_id> | db_schema_error | column "parent_changeset_id" does not exist |
+| …    | …           | …     | …          | …         | …                       | …           | …             |
+
+## Submitted changesets (reviewed but not approved)
+
+| Unit | Changeset ID | State | Local score | Deep score | Notes |
+|------|-------------|-------|------------|-----------|-------|
+
+## Incomplete / evicted units
+
+| Unit | Last known state | Evidence |
+|------|-----------------|----------|
+
+## Suggested recovery (platform side)
+
+1. Restore the broken platform component (in this outage: add the missing
+   `parent_changeset_id` column to the changesets table).
+2. Force-release any orphaned symbol locks held by evicted sessions listed above.
+3. Merge the approved changesets in dependency order (aggregation symbols / design
+   foundation units first). The harness has no authority to force this — a platform
+   operator must drive the merge.
+4. Once the repo's main branch reflects the merged state, the user can invoke
+   `/dkh continue` to resume from FILE SYNC.
+
+## DO NOT
+
+- Bulk-close the approved or submitted changesets above — they contain real,
+  reviewed work.
+- Re-dispatch these units before platform recovery — retries against a broken
+  merge pipeline create additional stuck changesets and orphaned locks.
+```
+
+Write-once semantics: the orchestrator writes this manifest a single time per run,
+on the first transition of `platform_halt` from `false` → `true`. Subsequent
+generator reports of `merge_failed_platform` in the same run append rows but do
+not create new manifests.
 
 ---
 
@@ -766,7 +871,15 @@ Total rounds: {rounds}
 ## Error Recovery
 
 - **Generator crashes**: Re-dispatch that single generator. Do not restart the entire build.
-- **dk_merge fails repeatedly**: Skip that changeset, note it in the eval.
+- **dk_merge conflict fails repeatedly** (non-platform): Skip that changeset, note it in the eval.
+  This is the conflict-path failure — `conflict_unresolved` after max self-resolve attempts.
+  Do NOT confuse with the platform-error path below.
+- **dk_merge reports `merge_failed_platform`** (platform-side DB error, 5xx, session
+  evicted mid-merge): the orchestrator trips `platform_halt` and executes the halt
+  manifest flow (see **HALT MANIFEST** in Phase 2). Do NOT bulk-close approved
+  changesets, do NOT re-dispatch, do NOT `dk_close` sessions for units in this state
+  — the generators themselves have already kept their sessions alive to preserve
+  symbol claims. Exit the run cleanly and wait for platform recovery.
 - **Dev server won't start (smoke test fails)**: This is a build failure, not an eval
   issue. DO NOT produce a "degraded eval report" — that is cheating. Instead: treat all
   units as failed, enter a fix round with the crash error as feedback, re-dispatch
