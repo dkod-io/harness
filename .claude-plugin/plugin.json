@@ -1,6 +1,6 @@
 {
   "name": "dkh",
-  "version": "0.1.51",
+  "version": "0.1.52",
   "description": "Autonomous harness for parallel AI agent development. One prompt in, working tested app out. Powered by dkod's AST-level semantic merging and Anthropic's Planner-Generator-Evaluator architecture.",
   "author": {
     "name": "dkod",
