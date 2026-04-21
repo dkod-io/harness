@@ -362,7 +362,7 @@ If `platform_halt == true`:
    `merge_failed_platform` — collect their reports but do not retry any of them.
 2. **Write the halt manifest** (see below). Set `halt_manifest_path` on the state.
 3. **Output** (each line standalone):
-   ```
+   ```text
    🛑 Harness halted — platform merge failure detected.
    Halt manifest: <halt_manifest_path>
    Approved changesets preserved: <N>

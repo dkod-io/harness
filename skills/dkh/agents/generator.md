@@ -445,7 +445,7 @@ After merge (or failure), report back to the orchestrator and **exit immediately
 ```
 
 **Template E — Platform merge error (preserved changeset):**
-```
+```markdown
 ## Generator Report: <unit title>
 
 **Status:** merge_failed_platform
