@@ -368,6 +368,24 @@ result = dk_merge(changeset_id, message: "<unit title>")
   ```
   If you also receive `changeset.parent_rollback_invalidated`, your parent failed
   merge. Close + report the unit for re-planning (don't retry blindly).
+- **MergePlatformError** → `dk_merge` failed with a platform-side error, not a
+  conflict. Signals: HTTP 5xx on the merge call; error strings containing
+  "does not exist", "internal error", "database", "schema", "timeout", or "evicted";
+  session eviction notifications fired mid-merge; any non-success response that is
+  neither MergeConflict nor MERGE_BLOCKED.
+  - Do **NOT** retry — retrying against a broken merge pipeline only creates more
+    stuck changesets and orphaned symbol locks.
+  - Do **NOT** call `dk_close` — keeping the session alive preserves your approved
+    changeset and prevents your symbol claims from orphaning. The orchestrator
+    decides when to clean up.
+  - Exit with `Status: merge_failed_platform`, including the changeset_id, the
+    review scores you already achieved, and the raw error from `dk_merge`.
+
+  When uncertain between MergeConflict and MergePlatformError, prefer the latter.
+  The orchestrator has a circuit-breaker for platform errors: misclassifying a
+  conflict as platform only halts one run, while misclassifying a platform error
+  as a conflict lets the harness burn its remaining generators against a broken
+  platform.
 
 The `dk_merge` response includes step-by-step instructions when conflicts occur.
 
@@ -426,7 +444,24 @@ After merge (or failure), report back to the orchestrator and **exit immediately
 **Notes:** <what was tried>
 ```
 
-**After outputting your report, call `dk_close(session_id)` and exit.**
+**Template E — Platform merge error (preserved changeset):**
+```markdown
+## Generator Report: <unit title>
+
+**Status:** merge_failed_platform
+**Session ID:** <from dk_connect response>   ← KEEP ALIVE, do NOT dk_close
+**Changeset ID:** <from dk_submit response>  ← in `approved` state; ready to merge when platform recovers
+**Final review score:** local {X}/5, deep {Y}/5
+**Rounds used:** <count>
+**Error class:** <one of: db_schema_error | http_5xx | session_evicted_mid_merge | malformed_response | unknown_platform>
+**Error message:** <raw error from the dk_merge response>
+**Notes:** Session kept open to preserve symbol claims and the approved changeset. Do NOT re-dispatch this unit — work is complete; only the merge call failed.
+```
+
+**After outputting your report, call `dk_close(session_id)` and exit — with one
+exception: if your status is `merge_failed_platform`, do NOT call `dk_close`. Exit
+with the session still open so the approved changeset and its symbol claims are
+preserved for platform-side recovery.**
 
 ## When You're Re-Dispatched (Fix Round)
 
@@ -447,3 +482,6 @@ submit → verify → review-fix → approve → merge.
 4. **Be fast.** The build waits for the slowest generator. Parallelize file reads.
 5. **No package installs.** Orchestrator handles deps.
 6. **Bash timeout.** If you must run Bash, always prefix with `timeout 30`.
+7. **Never retry or `dk_close` on a platform merge error.** Classify as
+   `merge_failed_platform`, preserve the session, and let the orchestrator's
+   circuit-breaker decide.
