@@ -185,7 +185,7 @@ anything slower as a FAIL (error class: `timeout`).
 round-trip. **The orchestrator never touches dkod tools directly** — this is
 a sub-agent responsibility even though it is cheap.
 
-```
+```text
 Agent(
   subagent_type: "general-purpose",
   model: <generator model from active profile>,
@@ -244,7 +244,7 @@ Agent(
 - **PASS** → record the timestamp in an in-memory flag (for the recency skip
   above), log `preflight_merge: ok (elapsed=<s>s)`, proceed to Tool Detection.
 - **FAIL** → **abort the run**. Output, each line standalone:
-  ```
+  ```text
   ⛔ Pre-flight merge smoke test failed.
   Stage: <stage>
   Error class: <class>
