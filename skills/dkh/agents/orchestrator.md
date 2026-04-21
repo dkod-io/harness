@@ -195,8 +195,8 @@ Agent(
 
     Your job: validate that the dkod merge pipeline is healthy BEFORE the
     harness dispatches its expensive generators. Use ONLY these dkod MCP
-    tools: dk_connect, dk_file_write, dk_submit, dk_approve, dk_merge,
-    dk_close. Pass session_id on every call after dk_connect.
+    tools: dk_connect, dk_file_write, dk_submit, dk_verify, dk_approve,
+    dk_merge, dk_close. Pass session_id on every call after dk_connect.
 
     Steps (execute in order; stop and report FAIL at the first error):
 
@@ -206,13 +206,17 @@ Agent(
     2. dk_file_write(path: ".dkh/preflight.stamp",
                      content: "<current UTC ISO-8601 timestamp>\n")
     3. dk_submit(intent: "Pre-flight merge smoke test <timestamp>")
-    4. dk_approve(changeset_id)
+    4. dk_verify(changeset_id)
+       Exercises lint/type-check/test/semantic on the changeset. A timestamp
+       file has no symbols to verify, so this should pass trivially; a FAIL
+       here signals a platform issue in the verify path.
+    5. dk_approve(changeset_id)
        If local review returns severity:"error" on a single-line timestamp
        file, something is off — report FAIL with error class
        `unexpected_review_error`.
-    5. dk_merge(changeset_id,
+    6. dk_merge(changeset_id,
                 message: "chore: pre-flight merge smoke test <timestamp>")
-    6. dk_close(session_id)
+    7. dk_close(session_id)
 
     Report format (pick ONE, exact structure):
 
@@ -223,7 +227,7 @@ Agent(
 
     # FAIL
     Pre-flight merge smoke test FAILED.
-    Stage: <connect | write | submit | approve | merge>
+    Stage: <connect | write | submit | verify | approve | merge>
     Error class: <db_schema_error | http_5xx | session_evicted | malformed_response | unexpected_review_error | timeout | unknown>
     Error message: <raw error>
 
