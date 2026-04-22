@@ -37,64 +37,36 @@ because dkod's AST-level merge eliminates false conflicts.
 - User describes a complete application or feature set to build from scratch
 - Any task complex enough to benefit from parallel decomposition + evaluation
 
+## Source of Truth — READ THIS FIRST
+
+This file (`SKILL.md`) defines **activation and configuration only**:
+- When the harness activates
+- Prerequisites the host environment must provide
+- Model profiles the user can switch between
+- Pointers to the agent files
+
+**`agents/orchestrator.md` is authoritative for runtime behavior** — the phase-gated
+loop, state tracking, gate enforcement, PRE-FLIGHT, `/dkh continue` recovery, HALT
+manifest, round/REPLAN transitions, error recovery. When a rule or procedure is
+described in both files, the orchestrator's version wins.
+
+Each agent has its own authoritative file for its work:
+- `agents/planner.md` — work unit decomposition, File Manifest, Shared Contracts, Gate 1 self-check
+- `agents/generator.md` — write → submit → review-fix → approve → merge pipeline, symbol locking
+- `agents/evaluator.md` — skeptical scoring methodology
+
+If you find text in `SKILL.md` that overlaps with an agent file, trust the agent file and open a cleanup PR.
+
 ## Handling `/dkh continue`
 
-When the user sends `/dkh continue` (or just "continue"):
+When the user sends `/dkh continue` (or just "continue"), the orchestrator recovers
+state from any interrupted session — preserving `submitted` and `approved` changesets,
+closing only incomplete ones (`draft`, `conflicted`, `rejected`) — and resumes from the
+correct phase.
 
-**═══ MANDATORY: RECOVER STATE AND CLEAN UP BEFORE RESUMING ═══**
-
-**Before re-dispatching ANY generators**, recover the state from the interrupted session
-and clean up only what's incomplete. Do NOT bulk-close everything — submitted changesets
-represent completed work that must be preserved.
-
-**Step 1: Query dkod for existing changesets**
-Call `dk_status` or list changesets via the API to see what the interrupted session left behind.
-Categorize each changeset:
-
-- **`submitted` state** → KEEP. This generator finished its work. Record its changeset_id.
-  Do NOT close it. Do NOT re-dispatch this unit.
-- **`approved` state** → KEEP. This changeset passed review and is ready to merge.
-  Record its changeset_id. Proceed to merge in Phase 3.
-- **`draft` state** → INCOMPLETE. This generator was interrupted before dk_submit.
-  Mark this unit for re-dispatch.
-- **`conflicted` state** → STUCK. Mark this unit for re-dispatch.
-- **`rejected` state** → FAILED. Mark this unit for re-dispatch.
-
-**Step 2: Close incomplete/failed changesets and release their symbol claims**
-```
-# Close draft/conflicted/rejected — preserve submitted and approved
-Bash: curl -sf -X POST "https://api.dkod.io/api/repos/<owner>/<repo>/changesets/bulk-close" \
-  -H "Content-Type: application/json" \
-  -H "Authorization: Bearer $DKOD_API_KEY" \
-  -d '{"states": ["draft", "conflicted", "rejected"], "created_before": "'$(date -u +%Y-%m-%dT%H:%M:%SZ)'"}'  \
-  || { echo "Bulk-close failed — aborting resume. Check DKOD_API_KEY and repo path."; exit 1; }
-```
-
-**Step 3: Reconstruct harness state**
-- `changeset_ids` = list of submitted + approved changeset_ids from Step 1
-- `active_units` = units whose generators were incomplete (draft/conflicted/rejected/missing)
-- Units with submitted or approved changesets are DONE — skip them
-
-**Step 4: Resume with only the incomplete units**
-Re-dispatch only the generators for `active_units` (incomplete ones). The submitted
-changesets from completed generators are preserved — 20 minutes of work is not lost.
-
-Output: "Resuming harness — N/M generators completed before interruption. Re-dispatching K incomplete units."
-
-**Then proceed:**
-
-1. **If an active harness session exists** (the agent has state from a prior turn):
-   - Output the current harness state and phase
-   - Show which agents completed (submitted) vs need re-dispatch
-   - Resume the harness loop, skipping completed units
-
-2. **If no active harness session exists** (fresh context after app restart):
-   - Acknowledge the command: "No active harness session found in this context."
-   - Check for any active dkod sessions via `dk_status`
-   - If active sessions found, recover state as described above
-   - If no sessions found, tell the user to start a new build with `/dkh <prompt>`
-
-**Never ignore a `/dkh continue` silently.** Always acknowledge with current status.
+**Full recovery protocol:** see the "Resume from Interruption" section in
+`agents/orchestrator.md`. Never ignore a `/dkh continue` silently — always acknowledge
+with current status.
 
 ## Prerequisites Check
 
@@ -135,12 +107,6 @@ playwright-cli --version 2>/dev/null && HAS_PLAYWRIGHT=true
 # 2. Detect DESIGN.md (check all paths the planner searches)
 HAS_DESIGN_MD=false
 ( [ -f DESIGN.md ] || [ -f design.md ] || [ -f docs/DESIGN.md ] || [ -f docs/design.md ] ) && HAS_DESIGN_MD=true
-
-# Pass both flags to all agent dispatches:
-# - Planner: HAS_DESIGN_MD
-# - Generators: HAS_DESIGN_MD
-# - Evaluators: HAS_PLAYWRIGHT
-# - Smoke test: HAS_PLAYWRIGHT
 ```
 
 If dkod is missing, guide installation:
@@ -180,79 +146,12 @@ inherit the orchestrator's value, which wastes tokens.
 To switch profiles, change `Active profile:` above. The orchestrator reads this value
 at the start of each run.
 
-## The Autonomous Loop
-
-The harness runs a strict phase-gated loop: **PLAN → BUILD → LAND → File Sync → Smoke
-Test → EVAL → SHIP/FIX/REPLAN**. Each phase has entry/exit gates that block progression
-until artifacts exist.
-
-**`agents/orchestrator.md` is the single source of truth** for all phase details, gate
-checks, state tracking, dispatch templates, and transition logic. Read it before starting.
-
-**Key constraints:**
-- No `dk_push(mode:"pr")` without completed eval reports (Phase 5 only)
-- No evaluators without landed + smoke-tested code
-- No generators without a validated plan
-- `dk_verify` is NOT evaluation — Phase 4 tests the live app via chrome-devtools
-- All code changes go through dkod — never use Write/Edit/Bash on source files
-- Never ask the user anything — every decision is autonomous
-- Max 3 eval rounds, then ship with documented issues
-
-## Critical Design Principles
-
-### 0. Maximize parallelism — THE PRIME DIRECTIVE
-
-Default to parallel execution; only serialize when there is a hard data dependency.
-Use Claude Code agent teams (multiple Agent calls in one message) + dkod session isolation
-(each agent gets its own overlay). Together they turn serial builds into parallel builds.
-
-**Applies to every phase:** generators dispatch simultaneously, dk_verify runs in parallel,
-failed generators re-dispatch in parallel. The ONE exception: evaluators run sequentially
-(shared chrome-devtools browser session).
-
-### 1. Decompose by symbol, not file
-dkod merges at the AST level. Two generators editing different functions in the same file
-is not a conflict.
-
-### 2. One dkod session per generator
-Each generator calls `dk_connect` once. Sessions are isolated until merge.
-
-### 3. The Evaluator is standalone and skeptical
-From Anthropic's research: "tuning a standalone evaluator to be skeptical turns out to be far
-more tractable than making a generator critical of its own work." Default to FAIL unless
-proven PASS with evidence.
-
-### 4. File-based communication
-The plan and eval reports are structured artifacts that survive context resets.
-
-### 5. Autonomy is non-negotiable
-The harness NEVER asks the user for input. Conflicts → auto-resolve. Eval failures →
-auto-fix. Framework → infer from prompt. Package manager → bun.
-
-### 6. Max 3 eval rounds
-Prevents infinite loops. After 3 rounds, ship whatever works and document what doesn't.
-
-## Work Unit Schema
-
-The Planner produces work units in this structure (embedded in the plan artifact):
-
-```
-## Work Unit: <id>
-**Title:** <descriptive title>
-**OWNS (exclusive):** <list of qualified symbol names this unit solely owns>
-**Creates:** <list of new symbols with file paths>
-**Acceptance criteria:**
-- <testable criterion 1>
-- <testable criterion 2>
-**Complexity:** low | medium | high
-```
-
 ## Agent Definitions
 
-- **Planner**: `agents/planner.md` — expands prompt into spec + parallel work units
-- **Generator**: `agents/generator.md` — implements a single work unit via dkod session
-- **Evaluator**: `agents/evaluator.md` — tests merged result via chrome-devtools + dk_verify
-- **Orchestrator**: `agents/orchestrator.md` — drives the autonomous loop (this is you)
+- **Planner**: `agents/planner.md` — expands prompt into spec + parallel work units (authoritative for decomposition, File Manifest, Shared Contracts)
+- **Generator**: `agents/generator.md` — implements a single work unit via dkod session (authoritative for write → submit → review-fix → approve → merge pipeline, symbol locking)
+- **Evaluator**: `agents/evaluator.md` — tests merged result via chrome-devtools + dk_verify (authoritative for skeptical scoring)
+- **Orchestrator**: `agents/orchestrator.md` — drives the autonomous loop (authoritative for phase gates, state tracking, resume, HALT, round/REPLAN transitions)
 
 ## Reference Guides
 
