@@ -123,6 +123,12 @@ Use `dk_file_list` to check which files exist, then `dk_file_read` to read match
 
 ### Step 2: Understand the Codebase
 
+**═══ GREENFIELD HARD GATE ═══**
+If `dk_connect` reported 0 files (greenfield repo), SKIP every `dk_context` and
+`dk_file_read` call in this step. Do not list files, do not probe for existing specs —
+go straight to Step 3 (Write the Specification). Saves 30-90 seconds on greenfield runs
+and prevents spurious reads against files that do not exist yet.
+
 Understand the codebase **efficiently** — do NOT read every file:
 
 1. `dk_file_list` — get the full directory tree in one call
@@ -139,9 +145,14 @@ Understand the codebase **efficiently** — do NOT read every file:
 understand a specific symbol. `dk_context` gives you symbol signatures and call graphs
 without consuming tool calls on full file reads.
 
-**Budget: max 15 dk_file_read calls.** If the codebase has 30+ files, you MUST rely on
-`dk_context` for understanding implementation details. The file tree from `dk_file_list`
-+ entry points + types is sufficient for decomposition.
+**Budget: max 15 dk_file_read calls — AND BATCH THEM.** Issue all needed `dk_file_read`
+calls in a SINGLE turn (multiple parallel tool-use blocks in one message), not
+sequentially. Each serialized read is an MCP round-trip; batching turns 15 round-trips
+into 1. The same applies to `dk_context` calls — batch independent queries together.
+
+If the codebase has 30+ files, you MUST rely on `dk_context` for understanding
+implementation details. The file tree from `dk_file_list` + entry points + types is
+sufficient for decomposition.
 
 For greenfield projects (empty repo), skip context and go straight to specification.
 
