@@ -120,7 +120,7 @@ halt_manifest_path: null    # Path to the halt manifest once written (set when p
 
 ---
 
-### PRE-FLIGHT — DETERMINE REPO AND VERIFY DKOD CONNECTION
+### PRE-FLIGHT — DETERMINE REPO AND PREPARE
 
 **Before ANYTHING else**, determine the target repository:
 
@@ -132,137 +132,27 @@ halt_manifest_path: null    # Path to the halt manifest once written (set when p
    The repo might be under an org (`dkod-io/`) not the user's personal account (`haim-ari/`).
    Always use the `[dkod repo:]` tag or the git remote — never invent an owner.
 
-Then verify dkod is connected:
+**No explicit `dk_connect` verification.** If dkod is misconfigured, the planner's
+`dk_connect` in Phase 1 will fail fast and the orchestrator surfaces the error via
+the planner's failure report. Skipping the preflight verify saves two MCP round-trips
+on every run.
 
-```
-dk_connect(
-  codebase: "<owner/repo from step above>",
-  agent_name: "preflight",
-  intent: "Verify dkod connection before starting harness"
-)
-```
+### Bulk-Close Stale Changesets — BACKGROUND (non-blocking)
 
-**If dk_connect FAILS** → STOP IMMEDIATELY. Do NOT proceed to planning or building.
-Tell the user:
-```
-"dkod is not connected to <owner/repo>. Connect it at https://app.dkod.io
-before running /dkh. The harness requires dkod for session isolation —
-it cannot operate without it."
-```
-This is the ONE exception to "never ask the user anything" — a missing dkod connection
-is a hard prerequisite, not a decision the harness can make autonomously.
+Kick off the bulk-close in the background, then proceed immediately to Phase 1. The
+planner is read-only and does not need bulk-close to complete; only Phase 2 (generator
+dispatch) does. On a 3-5 min planner run, bulk-close has long since finished by the
+time Phase 2 starts.
 
-**If dk_connect SUCCEEDS** → close the preflight session (it was just a check).
-
-```
-# Clean slate — close all non-terminal changesets from previous runs.
-# This prevents stale sessions, orphaned claims, and false conflict_warnings.
-Bash: curl -sf -X POST "https://api.dkod.io/api/repos/<owner>/<repo>/changesets/bulk-close" \
+Bash(run_in_background: true): curl -sf -X POST "https://api.dkod.io/api/repos/<owner>/<repo>/changesets/bulk-close" \
   -H "Content-Type: application/json" \
   -H "Authorization: Bearer $DKOD_API_KEY" \
-  -d '{"states": ["draft", "submitted", "approved", "rejected"], "created_before": "'$(date -u +%Y-%m-%dT%H:%M:%SZ)'"}'
-```
+  -d '{"states": ["draft", "submitted", "approved", "rejected"], "created_before": "'$(date -u +%Y-%m-%dT%H:%M:%SZ)'"}' \
+  > /tmp/dkh-bulk-close.log 2>&1
 
-### Pre-Flight Merge Smoke Test — RUN ONCE BEFORE PLANNING
-
-**Why this exists:** A prior `/dkh` run burned 7 parallel Opus generators
-(~30 min of model budget) before the first `dk_merge` call surfaced a
-platform-side DB schema regression. A trivial round-trip through the merge
-pipeline here catches that class of outage in ~30 seconds, before any
-expensive work begins.
-
-**Skip condition:** If `dk_connect` above reported 0 files (greenfield repo),
-**skip the smoke test**. A greenfield repo has no base to merge against, and
-the first generator's merge exercises `dk_merge` for real — the smoke test
-would just duplicate that work without adding signal.
-
-**Skip condition (recency):** If a prior preflight smoke test succeeded in the
-last 5 minutes (same orchestrator session, in-memory flag), skip — the
-platform state has not plausibly changed.
-
-**Budget:** the smoke test must complete in under 3 minutes total. Treat
-anything slower as a FAIL (error class: `timeout`).
-
-**How to run:** dispatch a single sub-agent to perform a sentinel merge
-round-trip. **The orchestrator never touches dkod tools directly** — this is
-a sub-agent responsibility even though it is cheap.
-
-```text
-Agent(
-  subagent_type: "general-purpose",
-  model: <generator model from active profile>,
-  effort: "low",
-  prompt: <<~PROMPT,
-    Pre-flight merge smoke test for the dkod harness.
-
-    Your job: validate that the dkod merge pipeline is healthy BEFORE the
-    harness dispatches its expensive generators. Use ONLY these dkod MCP
-    tools: dk_connect, dk_file_write, dk_submit, dk_verify, dk_approve,
-    dk_merge, dk_close. Pass session_id on every call after dk_connect.
-
-    Steps (execute in order; stop and report FAIL at the first error):
-
-    1. dk_connect(codebase: "<owner/repo>",
-                  agent_name: "preflight-smoke",
-                  intent: "Pre-flight merge smoke test")
-    2. dk_file_write(path: ".dkh/preflight.stamp",
-                     content: "<current UTC ISO-8601 timestamp>\n")
-    3. dk_submit(intent: "Pre-flight merge smoke test <timestamp>")
-    4. dk_verify(changeset_id)
-       Exercises lint/type-check/test/semantic on the changeset. A timestamp
-       file has no symbols to verify, so this should pass trivially; a FAIL
-       here signals a platform issue in the verify path.
-    5. dk_approve(changeset_id)
-       If local review returns severity:"error" on a single-line timestamp
-       file, something is off — report FAIL with error class
-       `unexpected_review_error`.
-    6. dk_merge(changeset_id,
-                message: "chore: pre-flight merge smoke test <timestamp>")
-    7. dk_close(session_id)
-
-    Report format (pick ONE, exact structure):
-
-    # PASS
-    Pre-flight merge smoke test PASSED.
-    Merged commit: <hash>
-    Elapsed: <seconds>
-
-    # FAIL
-    Pre-flight merge smoke test FAILED.
-    Stage: <connect | write | submit | verify | approve | merge>
-    Error class: <db_schema_error | http_5xx | session_evicted | malformed_response | unexpected_review_error | timeout | unknown>
-    Error message: <raw error>
-
-    Do NOT retry. Do NOT attempt recovery. Return the FAIL report so the
-    orchestrator can abort before dispatching any planner or generators.
-  PROMPT,
-  description: "Pre-flight merge smoke test",
-  name: "preflight-smoke"
-)
-```
-
-**Interpret the result:**
-
-- **PASS** → record the timestamp in an in-memory flag (for the recency skip
-  above), log `preflight_merge: ok (elapsed=<s>s)`, proceed to Tool Detection.
-- **FAIL** → **abort the run**. Output, each line standalone:
-  ```text
-  ⛔ Pre-flight merge smoke test failed.
-  Stage: <stage>
-  Error class: <class>
-  Error message: <message>
-
-  The dkod merge pipeline is unhealthy. Aborting before dispatching
-  generators to avoid wasting model budget against a broken platform.
-  Retry `/dkh` once the platform is confirmed healthy.
-  ```
-  Do NOT write a halt manifest (no approved changesets exist yet; there is
-  nothing to preserve). Do NOT proceed to Phase 1. Exit the run.
-
-**Why this does not contradict "orchestrator never writes code":** the sub-agent
-writes a single timestamp file via `dk_file_write` — that goes through dkod's
-session isolation like any other write, just with a trivial payload. The
-orchestrator does not touch `dk_file_write` itself.
+Record the background task id. Before entering Phase 2, verify the task completed
+successfully. If it failed, log a warning and proceed — stale locks auto-release on
+session timeout (30 min).
 
 ### Tool Detection — Run Once During PRE-FLIGHT
 
@@ -325,9 +215,9 @@ Proceed to Phase 1.
 ### PHASE 1 — PLAN
 
 **Before spawning the planner, output this message to the user:**
-> 🔄 **Phase 1: Plan** — Spawning the planner agent to analyze the codebase and produce
-> parallel work units. This typically takes 3-5 minutes. Please wait — no action needed
-> until the plan is ready.
+> 🔄 **Phase 1: Plan** — Spawning the planner agent in parallel with background cleanup.
+> The planner analyzes the codebase and produces parallel work units; this typically
+> takes 3-5 minutes. Please wait — no action needed until the plan is ready.
 
 Spawn a single planner agent:
 
@@ -996,4 +886,3 @@ Run this EVERY time before calling dk_push:
 2. "Is `eval_reports` populated with scores for every criterion? If NO → STOP."
 3. "Do the eval reports contain at least one screenshot? If NO → STOP."
 4. "Am I in Phase 4? If NO → STOP."
-

@@ -158,15 +158,18 @@ profile and passes `model:` AND `effort:` on every Agent dispatch call.
 | Agent | quality | balanced | budget | effort |
 |-------|---------|----------|--------|--------|
 | **Orchestrator**\* | opus | opus | sonnet | high |
-| **Planner** | opus | opus | sonnet | max |
+| **Planner** | opus | opus | sonnet | high |
 | **Generator** | opus | sonnet | sonnet | high |
-| **Evaluator** | opus | sonnet | haiku | max |
+| **Evaluator** | opus | sonnet | haiku | high |
 
 \* The orchestrator model is set by the invoking Claude Code session, not by this table. This row is a recommendation for the session model, not enforced by the harness.
 
-**Effort levels are mandatory.** Planner and Evaluator use `max` (complex reasoning —
-decomposition, scoring). Generator uses `high` (fast execution — file writes, not deep
-analysis). Always pass `effort:` when dispatching agents.
+**Effort levels are mandatory.** All agents default to `high` effort. Opus at `high` is
+already performing extended reasoning, which is sufficient for the planner's decomposition
+and the evaluator's scoring. `max` engages an even larger thinking budget and typically
+adds significant latency for marginal quality gain; the harness no longer defaults to it.
+Always pass `effort:` when dispatching agents — an omitted `effort:` makes the agent
+inherit the orchestrator's value, which wastes tokens.
 
 - **quality** — All Opus. Maximum capability. Use for complex or high-stakes builds.
 - **balanced** (default) — Opus for planning and orchestration, Sonnet for implementation
